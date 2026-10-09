@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Mobius Town service: each player's door into the shared town.
+"""Möbius Town service: each player's door into the shared town.
 
 Every installation runs this service. The installation named HUB_HOST also
 keeps the shared world (hub.py). Elsewhere, the player's own service forwards
@@ -112,7 +112,7 @@ async def identity(ctx: Ctx) -> dict:
 async def require_handle(ctx: Ctx) -> dict:
   me = await identity(ctx)
   require(me['handle'] and not me['unavailable'],
-          'Connect a Möbius account with an @handle (in Möbius · You) to meet people in Mobius Town.', 409)
+          'Connect a Möbius account with an @handle (in Möbius · You) to meet the Möbians of Möbius Town.', 409)
   return me
 
 
@@ -149,7 +149,7 @@ async def peer(host: str, path: str, body=None):
   except Problem:
     raise
   except Exception:
-    raise Problem('Mobius Town is unreachable right now. You can keep exploring on your own.', 502)
+    raise Problem('Möbius Town is unreachable right now. You can keep exploring on your own.', 502)
   if response.status_code == 429:
     raise Problem('The town is very busy right now.', 429)
   if response.status_code >= 400:
@@ -209,7 +209,7 @@ async def own_request(ctx: Ctx, req: dict):
     me = await identity(ctx)
     return {'me': me if me['handle'] else None, 'hub': HUB_HOST, 'isHub': ctx.is_hub,
             'problem': None if me['handle'] and not me['unavailable'] else
-            'Connect a Möbius account with an @handle (in Möbius · You) to meet people in Mobius Town.'}
+            'Connect a Möbius account with an @handle (in Möbius · You) to meet the Möbians of Möbius Town.'}
   cid = body_cid(body)
   if path == 'join':
     me = await require_handle(ctx)
@@ -245,7 +245,7 @@ async def public_request(ctx: Ctx, req: dict):
       row = db.execute('SELECT document, expires FROM proofs WHERE id = ?', (key,)).fetchone()
     require(row is not None and row['expires'] > time.time(), 'Proof expired.', 403)
     return json.loads(row['document'])
-  require(ctx.is_hub, 'This installation does not host Mobius Town.', 404)
+  require(ctx.is_hub, 'This installation does not host Möbius Town.', 404)
   require(method == 'POST' and isinstance(body, dict), 'Not found.', 404)
   if path == 'exchange':
     require(set(body) == {'sender', 'proof', 'request'}, 'Invalid request.')
@@ -284,7 +284,7 @@ async def main(req) -> dict:
   if req.get('public'):
     return await public_request(ctx, req)
   scope = (req.get('actor') or {}).get('scope')
-  require(scope in ('owner', 'app', 'agent'), 'Open Mobius Town from your signed-in Möbius.', 403)
+  require(scope in ('owner', 'app', 'agent'), 'Open Möbius Town from your signed-in Möbius.', 403)
   return await own_request(ctx, req)
 
 
@@ -296,4 +296,4 @@ if __name__ == '__main__':
     print(json.dumps({'status': exc.status, 'body': {'error': exc.message}}))
   except Exception as exc:
     print(f'{type(exc).__name__}: {exc}', file=sys.stderr)
-    print(json.dumps({'status': 500, 'body': {'error': 'Mobius Town could not complete this request. Please retry.'}}))
+    print(json.dumps({'status': 500, 'body': {'error': 'Möbius Town could not complete this request. Please retry.'}}))

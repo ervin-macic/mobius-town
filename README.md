@@ -1,8 +1,8 @@
-# Mobius Town
+# Möbius Town
 
-A shared pixel-art town for everyone on Möbius, in the spirit of Gather Town.
-Walk your avatar around a common map; people's voices (and video) fade in as
-you approach and fade out as you leave. Houses hold games, the Town Hall has
+A shared pixel-art town for everyone on Möbius, in the spirit of Gather Town;
+everyone in it is a Möbian. Walk your avatar around a common map; Möbians'
+voices (and video) fade in as you approach and fade out as you leave. Houses hold games, the Town Hall has
 lockable meeting rooms and an auditorium with a spotlight, the Cinema's
 screen puts on a YouTube video for everyone, and the Football Ground hosts
 2 v 2 matches.

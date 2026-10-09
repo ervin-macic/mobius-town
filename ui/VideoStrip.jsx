@@ -59,7 +59,7 @@ export default function VideoStrip({ town, tiles, self, hidden }) {
 
   if (!cards.length || hidden) return null
   return (
-    <div className="mt-strip" ref={stripRef} aria-label="People you can see and hear">
+    <div className="mt-strip" ref={stripRef} aria-label="Möbians you can see and hear">
       {cards.map((c) => {
         const opacity = c.self ? 1 : Math.max(0.35, Math.min(1, 0.25 + c.gain))
         return (

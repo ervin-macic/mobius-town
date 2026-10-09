@@ -494,8 +494,8 @@ def tree_at(m, rng, tx, ty, sid=None):
 
 def build_town(offs):
   rng = noise_rng(7)
-  m = Map('town', 'Mobius Town', TOWN_W, TOWN_H, True, 'grass')
-  m.add_room('town', 'Mobius Town', 'outdoor', [(0, 0, TOWN_W, TOWN_H)])
+  m = Map('town', 'Möbius Town', TOWN_W, TOWN_H, True, 'grass')
+  m.add_room('town', 'Möbius Town', 'outdoor', [(0, 0, TOWN_W, TOWN_H)])
   paint_grass(m, rng)
 
   # Paths: plaza, streets, the Town Hall stairs, the walk to the Möbius garden.
@@ -668,7 +668,7 @@ def build_town(offs):
   place(m, 'stump', 26, 47, block=(26, 47, 2, 1))
   place(m, 'rocks', 54, 45, block=(54, 45, 2, 1))
   place(m, 'signpost', 34, 36, block=(34, 36, 1, 1))
-  m.objects.append({'id': 'welcome', 'kind': 'sign', 'text': 'Welcome to Mobius Town', 'use': [[33, 36], [34, 37]]})
+  m.objects.append({'id': 'welcome', 'kind': 'sign', 'text': 'Welcome to Möbius Town', 'use': [[33, 36], [34, 37]]})
   for (x, y) in ((27, 35), (35, 35)):
     m.ent('hedge', x * T, y * T)
     m.block(x, y, 2, 1)

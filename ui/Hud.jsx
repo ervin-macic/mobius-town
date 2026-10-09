@@ -109,7 +109,7 @@ export function TopBar({ ui, status, online, roomLock, onLock, onHelp, places, o
   const place = ui.room && ui.room.name !== ui.mapName ? ui.room.name : ui.mapName
   const dotClass = status === 'online' ? '' : status === 'connecting' ? ' is-warn' : ' is-off'
   const statusText = status === 'online'
-    ? `${online} ${online === 1 ? 'person' : 'people'} in town`
+    ? `${online} ${online === 1 ? 'Möbian' : 'Möbians'} in town`
     : status === 'connecting' ? 'Connecting…' : 'Offline — exploring alone'
   return (
     <div className="mt-top">
@@ -191,9 +191,9 @@ export function Dock({
       <button
         type="button"
         className={`mt-iconbtn${bubble ? ' is-gold' : ''}`}
-        aria-label={bubble ? 'Leave the conversation bubble' : 'Start a conversation bubble with people nearby'}
+        aria-label={bubble ? 'Leave the conversation bubble' : 'Start a conversation bubble with Möbians nearby'}
         aria-pressed={!!bubble}
-        title={bubble ? 'Leave bubble (B)' : 'Bubble up with people nearby (B)'}
+        title={bubble ? 'Leave bubble (B)' : 'Bubble up with Möbians nearby (B)'}
         onClick={onBubble}
       >
         <Group aria-hidden="true" />
@@ -245,9 +245,9 @@ export function Dock({
       <button
         type="button"
         className={`mt-iconbtn${panel === 'people' ? ' is-on' : ''}`}
-        aria-label={`People (${online})`}
+        aria-label={`Möbians (${online})`}
         aria-pressed={panel === 'people'}
-        title="People (P)"
+        title="Möbians (P)"
         onClick={() => onPanel('people')}
       >
         <Users aria-hidden="true" />
@@ -293,12 +293,12 @@ export function HelpCard({ onClose }) {
   const rows = [
     ['Arrows / WASD', 'Walk (or tap anywhere to walk there)'],
     ['X / E / Space', 'Use what you are standing at'],
-    ['Enter', 'Chat with people who can hear you'],
+    ['Enter', 'Chat with the Möbians who can hear you'],
     ['B', 'Start or leave a conversation bubble'],
     ['M / V', 'Microphone / camera'],
     ['1 – 4', 'Wave, heart, wow, hmm'],
     ['5', 'Dance (pick a song in the emote menu)'],
-    ['P', 'People: walk to someone or challenge them to a party'],
+    ['P', 'Möbians: walk to someone or challenge them to a party'],
     ['+ / − / 0', 'Zoom in or out 20%, or back to 100%'],
     ['Esc', 'Close panels and games'],
   ]

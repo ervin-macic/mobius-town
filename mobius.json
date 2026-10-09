@@ -1,9 +1,9 @@
 {
   "id": "mobius-town",
   "package_id": "e62b0c31-8b49-41f3-8270-4b9b8ad338b6",
-  "name": "Mobius Town",
-  "version": "0.4.0",
-  "description": "A shared pixel-art town for everyone on Möbius: walk up to people to talk, gather in conversation bubbles and lockable rooms, take the stage, and play chess, Connect Four and quick party games.",
+  "name": "Möbius Town",
+  "version": "0.4.1",
+  "description": "A shared pixel-art town where everyone is a Möbian: walk up to others to talk, gather in conversation bubbles and lockable rooms, take the stage, and play chess, Connect Four, football and quick party games.",
   "entry": "index.jsx",
   "icon": "icon.png",
   "offline_capable": false,
@@ -98,17 +98,17 @@
     "audio/win.mp3": "audio/win.mp3"
   },
   "store": {
-    "tagline": "A shared pixel-art town: walk around with friends, chat, play chess or football, watch videos and pet the cats.",
-    "description": "Mobius Town is one shared pixel-art town for everyone who installs it. Pick a male or female character in your own colours and walk around with everyone else in town.\n\nGet together:\n- Chat with the people near you or with the whole town, wave, dance to a song you pick, and gather in conversation bubbles.\n- Step into a meeting room and lock the door, or take the auditorium stage; the calendar schedules lightning-talk nights and game nights.\n- Put on a YouTube video in the cinema and everyone in the room watches together.\n\nPlay together:\n- Walk onto the Football Ground for a 2 v 2 match. Bots fill any empty place, at easy, medium or hard.\n- Take a seat in the Chess Club or the Game Den for chess or Connect Four, against a friend or a bot.\n- Challenge anyone to a party of three quick games: Quick Draw, Rock-Paper-Scissors and a Speed Sprint of mental sums.\n\nAnd the small things: pet the cats that wander around town, sit on any chair, sofa or bench, toss a coin into the fountain, and admire the giant rotating Möbius strip in the Möbius Garden, with town music and crackling fireplaces along the way.\n\nEveryone joins the same town, which runs on its publisher's Möbius. Voice, video and screen sharing with the people near you are on the way: they need a Möbius update that is under review, and the town will add them once it ships. Art, fonts, music and sounds are CC0 (see CREDITS.md).",
+    "tagline": "A shared pixel-art town for Möbians: walk around together, chat, play chess or football, pet the cats.",
+    "description": "Möbius Town is one shared pixel-art town for everyone who installs it, and everyone in it is a Möbian. Pick a male or female character in your own colours and walk around with all the other Möbians.\n\nGet together:\n- Chat with the Möbians near you or with the whole town, wave, dance to a song you pick, and gather in conversation bubbles.\n- Step into a meeting room and lock the door, or take the auditorium stage; the calendar schedules lightning-talk nights and game nights.\n- Put on a YouTube video in the cinema and everyone in the room watches together.\n\nPlay together:\n- Walk onto the Football Ground for a 2 v 2 match. Bots fill any empty place, at easy, medium or hard.\n- Take a seat in the Chess Club or the Game Den for chess or Connect Four, against another Möbian or a bot.\n- Challenge anyone to a party of three quick games: Quick Draw, Rock-Paper-Scissors and a Speed Sprint of mental sums.\n\nAnd the small things: pet the cats that wander around town, sit on any chair, sofa or bench, toss a coin into the fountain, and admire the giant rotating Möbius strip in the Möbius Garden, with town music and crackling fireplaces along the way.\n\nEvery Möbian joins the same town, which runs on its publisher's Möbius. Voice, video and screen sharing with the Möbians near you are on the way: they need a Möbius update that is under review, and the town will add them once it ships. Art, fonts, music and sounds are CC0 (see CREDITS.md).",
     "screenshots": [
       {
         "src": "static/store/mobius-town-square.png",
-        "alt": "The town square: neighbours chatting in a conversation bubble, others on benches, one dancing with music notes.",
-        "label": "One shared town for everyone who installs it."
+        "alt": "The town square: Möbians chatting in a conversation bubble, others on benches, one dancing with music notes.",
+        "label": "One shared town for all Möbians."
       },
       {
         "src": "static/store/mobius-town-football.png",
-        "alt": "The Football Ground: a 2 v 2 match against bots at the centre circle, with townsfolk watching from benches and a cat napping beside the pitch.",
+        "alt": "The Football Ground: a 2 v 2 match against bots at the centre circle, with Möbians watching from benches and a cat napping beside the pitch.",
         "label": "Play 2 v 2 football; bots fill empty places."
       },
       {

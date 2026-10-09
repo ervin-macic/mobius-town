@@ -32,7 +32,7 @@ META = {
   },
   "town": {
    "h": 71,
-   "name": "Mobius Town",
+   "name": "M\u00f6bius Town",
    "w": 64
   }
  },

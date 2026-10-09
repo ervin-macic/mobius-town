@@ -102,7 +102,7 @@ export default function App({ appId, token }) {
   return (
     <div className="mt-root">
       <style>{CSS + PARTY_CSS}</style>
-      {phase === 'loading' && <div className="mt-loading"><p>Loading Mobius Town…</p></div>}
+      {phase === 'loading' && <div className="mt-loading"><p>Loading Möbius Town…</p></div>}
       {phase === 'join' && profile && (
         <JoinScreen
           mode="join"
@@ -301,7 +301,7 @@ function GameView({ town, profile, identity, onProfile }) {
         ref={canvasRef}
         className="mt-canvas"
         tabIndex={0}
-        aria-label={`Mobius Town map. You are in ${ui?.room?.name || ui?.mapName || 'town'}. Use the arrow keys to walk, or tap where you want to go.`}
+        aria-label={`Möbius Town map. You are in ${ui?.room?.name || ui?.mapName || 'town'}. Use the arrow keys to walk, or tap where you want to go.`}
         data-place={ui ? `${ui.mapId}:${ui.room?.id || ''}:${ui.x},${ui.y}` : ''}
         onPointerDown={onPointerDown}
       />

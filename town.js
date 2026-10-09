@@ -173,7 +173,7 @@ export class Town {
       this.hello = await this.hub.hello()
     } catch (err) {
       this.hello = null
-      this.helloError = err?.message || 'Mobius Town is unreachable right now.'
+      this.helloError = err?.message || 'Möbius Town is unreachable right now.'
       return null
     }
     const me = this.hello?.me
@@ -445,7 +445,7 @@ export class Town {
     if (myBubble && myBubble !== this.state.bubble) {
       const others = world.bubbles[myBubble].members.filter((p) => p !== this.pid)
       const names = others.map((p) => this.nameOf(p)).join(', ')
-      if (!this.state.bubble) this.toast(`You're in a bubble with ${names}. People nearby still hear you faintly.`)
+      if (!this.state.bubble) this.toast(`You're in a bubble with ${names}. Möbians nearby still hear you faintly.`)
     }
     // Town chat: the first load is history; later arrivals count as unread.
     const firstLoad = !this.feedLoaded
@@ -1006,7 +1006,7 @@ export class Town {
     const ui = this.game.snapshot()
     if (!ui.room?.lockable) return
     if (this.state.roomLock) this.act('unlock', { room: ui.room.id })
-    else this.act('lock').then((r) => { if (r) this.toast(`${ui.room.name} is locked. Only people inside can come and go.`) })
+    else this.act('lock').then((r) => { if (r) this.toast(`${ui.room.name} is locked. Only Möbians inside can come and go.`) })
   }
 
   toggleBubble() {
@@ -1543,8 +1543,8 @@ const EVENT_PLACE_TO_PLACE = { stage: 'stage', plaza: 'plaza', cafe: 'cafe', cin
 
 const SIGN_TEXT = {
   'pitch-sign': 'Walk onto the pitch to join a match: two against two, three minutes, and bots fill any empty place. Arrow keys or WASD to run, Space or X to kick.',
-  welcome: 'Walk up to people to talk — voices fade with distance. Houses hold games: the Chess Club and the Game Den start a match when two people walk in. Meet privately in the Town Hall, take the stage in its auditorium, or put something on at the Cinema.',
-  'sign-chess': 'Two people inside means a game of chess. Spectators welcome.',
+  welcome: 'Welcome, Möbian! Walk up to others to talk — what you say reaches whoever is close. Houses hold games: the Chess Club and the Game Den start a match when two Möbians walk in. Meet privately in the Town Hall, take the stage in its auditorium, or put something on at the Cinema.',
+  'sign-chess': 'Two Möbians inside means a game of chess. Spectators welcome.',
   'sign-den': 'Connect Four for two. Walk in with a friend.',
   'sign-cinema': 'Walk up to the screen and press X to choose what plays.',
   'sign-cafe': 'Grab a table and catch up. Bubbles welcome.',

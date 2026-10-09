@@ -46,8 +46,8 @@ export function ChatPanel({ town, state, initialTab = 'nearby', onClose }) {
         {messages.length === 0 && (
           <p className="mt-empty">
             {tab === 'nearby'
-              ? 'Messages here reach whoever can hear you right now — the same people your voice would reach.'
-              : 'The town board: everyone in Mobius Town sees these, wherever they are.'}
+              ? 'Messages here reach whoever can hear you right now — the same Möbians your voice would reach.'
+              : 'The town board: every Möbian sees these, wherever they are.'}
           </p>
         )}
         {messages.map((m) => (
@@ -65,7 +65,7 @@ export function ChatPanel({ town, state, initialTab = 'nearby', onClose }) {
           className="mt-input"
           value={text}
           maxLength={280}
-          placeholder={tab === 'nearby' ? 'Say something to people near you' : 'Post to the whole town'}
+          placeholder={tab === 'nearby' ? 'Say something to the Möbians near you' : 'Post to the whole town'}
           aria-label="Message"
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); onClose() } }}
@@ -121,10 +121,10 @@ export function PeoplePanel({ town, state, onClose }) {
     </div>
   )
   return (
-    <section className="mt-panel" aria-label="People in town">
+    <section className="mt-panel" aria-label="Möbians in town">
       <header>
-        <h2>People</h2>
-        <button type="button" className="mt-iconbtn" style={{ width: 36, height: 36 }} aria-label="Close people list" onClick={onClose}>
+        <h2>Möbians</h2>
+        <button type="button" className="mt-iconbtn" style={{ width: 36, height: 36 }} aria-label="Close the Möbians list" onClick={onClose}>
           <X aria-hidden="true" />
         </button>
       </header>
@@ -132,7 +132,7 @@ export function PeoplePanel({ town, state, onClose }) {
         {state.people.length === 0 && (
           <p className="mt-empty">
             {state.status === 'online'
-              ? "It's just you for now. Anyone with Mobius Town on their Möbius lands in this same town."
+              ? "It's just you for now. Everyone who opens Möbius Town on their Möbius becomes a Möbian of this same town."
               : state.problem || 'Connecting to the town…'}
           </p>
         )}

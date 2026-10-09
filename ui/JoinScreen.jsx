@@ -37,10 +37,10 @@ export default function JoinScreen({
       <form className="mt-card" onSubmit={submit}>
         {mode === 'join' ? (
           <>
-            <h1 id="mt-join-title" className="mt-title">MOBIUS TOWN</h1>
+            <h1 id="mt-join-title" className="mt-title">MÖBIUS TOWN</h1>
             <p className="mt-lede">
-              A shared pixel town for everyone on Möbius. Walk up to people to talk, wander into
-              houses to play games together, and step on stage to speak to a whole room.
+              A shared pixel town where everyone is a Möbian. Walk up to others to talk, wander
+              into houses to play games together, and step on stage to speak to a whole room.
             </p>
           </>
         ) : (
@@ -142,8 +142,8 @@ export default function JoinScreen({
             </div>}
             <p className="mt-note">
               {callNote || (identity?.handle
-                ? `You'll appear as @${identity.handle}'s avatar. Voice and video only connect with people near you.`
-                : 'Voice and video only connect with people near you.')}
+                ? `You'll appear as @${identity.handle}'s avatar. Voice and video only connect with Möbians near you.`
+                : 'Voice and video only connect with Möbians near you.')}
             </p>
           </>
         )}

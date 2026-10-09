@@ -1,4 +1,4 @@
-// Calls to this installation's own Mobius Town service (which talks to the hub).
+// Calls to this installation's own Möbius Town service (which talks to the hub).
 
 export class ServiceError extends Error {
   constructor(message, status) {
@@ -39,7 +39,7 @@ export class HubClient {
     if (res.status === 429) throw new ServiceError('The town is very busy right now.', 429)
     if (!res.ok) {
       const message = data?.error || data?.detail || (res.status === 401
-        ? 'Your Möbius session expired. Reopen Mobius Town to keep playing.'
+        ? 'Your Möbius session expired. Reopen Möbius Town to keep playing.'
         : `The town could not answer (${res.status}).`)
       throw new ServiceError(typeof message === 'string' ? message : 'The town could not answer.', res.status)
     }

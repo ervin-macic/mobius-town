@@ -1,4 +1,4 @@
-"""Mobius Town hub: the shared world's state, kept by one installation.
+"""Möbius Town hub: the shared world's state, kept by one installation.
 
 Pure state logic over SQLite so it can be tested without HTTP. The service
 (service.py) authenticates callers and passes a player id (`pid`) in.
@@ -216,7 +216,7 @@ def assign_pid(db, handle: str, cid: str, now: float) -> str:
     row = rows.get(pid)
     if row is None or now - row['seen'] > ONLINE_SECONDS:
       return pid
-  raise Problem('Too many windows are open in Mobius Town for this account.', 429)
+  raise Problem('Too many windows are open in Möbius Town for this account.', 429)
 
 
 def open_session(db, handle: str, host: str, cid: str, now: float | None = None) -> tuple[str, str]:

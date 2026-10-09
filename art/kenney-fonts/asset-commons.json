@@ -1,0 +1,79 @@
+{
+  "asset_commons": "0.5.0",
+  "asset_id": "kenney:kenney-fonts",
+  "title": "Kenney Fonts",
+  "type": "ui",
+  "source": "kenney",
+  "source_name": "Kenney",
+  "source_url": "https://kenney.nl/assets/kenney-fonts",
+  "authors": [
+    {
+      "name": "Kenney",
+      "url": "https://kenney.nl"
+    }
+  ],
+  "license": {
+    "id": "CC0-1.0",
+    "name": "Creative Commons Zero 1.0 Universal",
+    "url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "attribution_required": false,
+    "share_alike": false
+  },
+  "credit": "“Kenney Fonts” by Kenney (https://kenney.nl/assets/kenney-fonts) — CC0, no attribution required.",
+  "variant": "zip",
+  "files": [
+    {
+      "path": "Fonts/Kenney Blocks.ttf",
+      "size": 30508
+    },
+    {
+      "path": "Fonts/Kenney Future Narrow.ttf",
+      "size": 34856
+    },
+    {
+      "path": "Fonts/Kenney Future.ttf",
+      "size": 34116
+    },
+    {
+      "path": "Fonts/Kenney High Square.ttf",
+      "size": 25004
+    },
+    {
+      "path": "Fonts/Kenney High.ttf",
+      "size": 27824
+    },
+    {
+      "path": "Fonts/Kenney Mini Square.ttf",
+      "size": 23996
+    },
+    {
+      "path": "Fonts/Kenney Mini.ttf",
+      "size": 26156
+    },
+    {
+      "path": "Fonts/Kenney Pixel Square.ttf",
+      "size": 25568
+    },
+    {
+      "path": "Fonts/Kenney Pixel.ttf",
+      "size": 28276
+    },
+    {
+      "path": "Fonts/Kenney Rocket Square.ttf",
+      "size": 24800
+    },
+    {
+      "path": "Fonts/Kenney Rocket.ttf",
+      "size": 27364
+    },
+    {
+      "path": "License.txt",
+      "size": 564
+    },
+    {
+      "path": "Fonts/Kenney Mini Square Mono.ttf",
+      "size": 24612
+    }
+  ],
+  "downloaded_at": "2026-10-07T23:50:39Z"
+}

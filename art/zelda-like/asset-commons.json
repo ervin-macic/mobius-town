@@ -1,0 +1,59 @@
+{
+  "asset_commons": "0.5.0",
+  "asset_id": "opengameart:zelda-like-tilesets-and-sprites",
+  "title": "Zelda-like tilesets and sprites",
+  "type": "sprite",
+  "source": "opengameart",
+  "source_name": "OpenGameArt",
+  "source_url": "https://opengameart.org/content/zelda-like-tilesets-and-sprites",
+  "authors": [
+    {
+      "name": "ArMM1998",
+      "url": "https://opengameart.org/users/armm1998"
+    }
+  ],
+  "license": {
+    "id": "CC0-1.0",
+    "name": "Creative Commons Zero 1.0 Universal",
+    "url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "attribution_required": false,
+    "share_alike": false
+  },
+  "credit": "“Zelda-like tilesets and sprites” by ArMM1998, OpenGameArt (https://opengameart.org/content/zelda-like-tilesets-and-sprites) — CC0, no attribution required.",
+  "variant": "gfx.zip",
+  "files": [
+    {
+      "path": "gfx/cave.png",
+      "size": 14384
+    },
+    {
+      "path": "gfx/character.png",
+      "size": 10952
+    },
+    {
+      "path": "gfx/font.png",
+      "size": 2471
+    },
+    {
+      "path": "gfx/Inner.png",
+      "size": 17936
+    },
+    {
+      "path": "gfx/log.png",
+      "size": 4950
+    },
+    {
+      "path": "gfx/NPC_test.png",
+      "size": 1447
+    },
+    {
+      "path": "gfx/objects.png",
+      "size": 24209
+    },
+    {
+      "path": "gfx/Overworld.png",
+      "size": 100846
+    }
+  ],
+  "downloaded_at": "2026-10-07T23:25:12Z"
+}

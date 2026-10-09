@@ -1,0 +1,57 @@
+{
+  "asset_commons": "0.5.0",
+  "asset_id": "opengameart:chess-pieces-in-svg-format",
+  "title": "Chess Pieces in .svg Format",
+  "type": "sprite",
+  "source": "opengameart",
+  "source_name": "OpenGameArt",
+  "source_url": "https://opengameart.org/content/chess-pieces-in-svg-format",
+  "authors": [
+    {
+      "name": "femrek",
+      "url": "https://opengameart.org/users/femrek"
+    }
+  ],
+  "license": {
+    "id": "CC0-1.0",
+    "name": "Creative Commons Zero 1.0 Universal",
+    "url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "attribution_required": false,
+    "share_alike": false
+  },
+  "credit": "“Chess Pieces in .svg Format” by femrek, OpenGameArt (https://opengameart.org/content/chess-pieces-in-svg-format) — CC0, no attribution required.",
+  "variant": "all",
+  "files": [
+    {
+      "path": "bishop.svg",
+      "size": 1043,
+      "md5": null
+    },
+    {
+      "path": "king.svg",
+      "size": 735,
+      "md5": null
+    },
+    {
+      "path": "knight.svg",
+      "size": 1114,
+      "md5": null
+    },
+    {
+      "path": "pawn.svg",
+      "size": 262,
+      "md5": null
+    },
+    {
+      "path": "queen.svg",
+      "size": 611,
+      "md5": null
+    },
+    {
+      "path": "rok.svg",
+      "size": 774,
+      "md5": null
+    }
+  ],
+  "downloaded_at": "2026-10-08T14:41:25Z"
+}

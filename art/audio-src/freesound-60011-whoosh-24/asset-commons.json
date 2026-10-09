@@ -1,0 +1,32 @@
+{
+  "asset_commons": "0.5.0",
+  "asset_id": "freesound:60011",
+  "title": "whoosh 24",
+  "type": "sound",
+  "source": "freesound",
+  "source_name": "Freesound",
+  "source_url": "https://freesound.org/people/qubodup/sounds/60011/",
+  "authors": [
+    {
+      "name": "qubodup",
+      "url": "https://freesound.org/people/qubodup/"
+    }
+  ],
+  "license": {
+    "id": "CC0-1.0",
+    "name": "Creative Commons Zero 1.0 Universal",
+    "url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "attribution_required": false,
+    "share_alike": false
+  },
+  "credit": "“whoosh 24” by qubodup, Freesound (https://freesound.org/people/qubodup/sounds/60011/) — CC0, no attribution required.",
+  "variant": "hq-ogg",
+  "files": [
+    {
+      "path": "60011-whoosh-24.ogg",
+      "size": 18837,
+      "md5": null
+    }
+  ],
+  "downloaded_at": "2026-10-08T11:32:49Z"
+}

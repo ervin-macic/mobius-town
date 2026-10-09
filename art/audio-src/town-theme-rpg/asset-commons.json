@@ -1,0 +1,32 @@
+{
+  "asset_commons": "0.5.0",
+  "asset_id": "opengameart:town-theme-rpg",
+  "title": "Town Theme RPG",
+  "type": "music",
+  "source": "opengameart",
+  "source_name": "OpenGameArt",
+  "source_url": "https://opengameart.org/content/town-theme-rpg",
+  "authors": [
+    {
+      "name": "cynicmusic",
+      "url": "https://opengameart.org/users/cynicmusic"
+    }
+  ],
+  "license": {
+    "id": "CC0-1.0",
+    "name": "Creative Commons Zero 1.0 Universal",
+    "url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "attribution_required": false,
+    "share_alike": false
+  },
+  "credit": "“Town Theme RPG” by cynicmusic, OpenGameArt (https://opengameart.org/content/town-theme-rpg) — CC0, no attribution required.",
+  "variant": "TownTheme.mp3",
+  "files": [
+    {
+      "path": "TownTheme.mp3",
+      "size": 1316581,
+      "md5": null
+    }
+  ],
+  "downloaded_at": "2026-10-08T11:22:02Z"
+}

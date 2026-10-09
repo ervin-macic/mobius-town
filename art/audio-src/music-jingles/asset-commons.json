@@ -1,0 +1,383 @@
+{
+  "asset_commons": "0.5.0",
+  "asset_id": "kenney:music-jingles",
+  "title": "Music Jingles",
+  "type": "music",
+  "source": "kenney",
+  "source_name": "Kenney",
+  "source_url": "https://kenney.nl/assets/music-jingles",
+  "authors": [
+    {
+      "name": "Kenney",
+      "url": "https://kenney.nl"
+    }
+  ],
+  "license": {
+    "id": "CC0-1.0",
+    "name": "Creative Commons Zero 1.0 Universal",
+    "url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "attribution_required": false,
+    "share_alike": false
+  },
+  "credit": "“Music Jingles” by Kenney (https://kenney.nl/assets/music-jingles) — CC0, no attribution required.",
+  "variant": "zip",
+  "files": [
+    {
+      "path": "Preview.ogg",
+      "size": 155244
+    },
+    {
+      "path": "Visit Kenney.url",
+      "size": 45
+    },
+    {
+      "path": "Visit Patreon.url",
+      "size": 55
+    },
+    {
+      "path": "Audio/8-Bit jingles/jingles_NES00.ogg",
+      "size": 39948
+    },
+    {
+      "path": "Audio/8-Bit jingles/jingles_NES01.ogg",
+      "size": 11758
+    },
+    {
+      "path": "Audio/8-Bit jingles/jingles_NES02.ogg",
+      "size": 11743
+    },
+    {
+      "path": "Audio/8-Bit jingles/jingles_NES03.ogg",
+      "size": 16573
+    },
+    {
+      "path": "Audio/8-Bit jingles/jingles_NES04.ogg",
+      "size": 16796
+    },
+    {
+      "path": "Audio/8-Bit jingles/jingles_NES05.ogg",
+      "size": 21439
+    },
+    {
+      "path": "Audio/8-Bit jingles/jingles_NES06.ogg",
+      "size": 19138
+    },
+    {
+      "path": "Audio/8-Bit jingles/jingles_NES07.ogg",
+      "size": 18971
+    },
+    {
+      "path": "Audio/8-Bit jingles/jingles_NES08.ogg",
+      "size": 16534
+    },
+    {
+      "path": "Audio/8-Bit jingles/jingles_NES09.ogg",
+      "size": 11934
+    },
+    {
+      "path": "Audio/8-Bit jingles/jingles_NES10.ogg",
+      "size": 12001
+    },
+    {
+      "path": "Audio/8-Bit jingles/jingles_NES11.ogg",
+      "size": 21177
+    },
+    {
+      "path": "Audio/8-Bit jingles/jingles_NES12.ogg",
+      "size": 21202
+    },
+    {
+      "path": "Audio/8-Bit jingles/jingles_NES13.ogg",
+      "size": 25177
+    },
+    {
+      "path": "Audio/8-Bit jingles/jingles_NES14.ogg",
+      "size": 11717
+    },
+    {
+      "path": "Audio/8-Bit jingles/jingles_NES15.ogg",
+      "size": 11849
+    },
+    {
+      "path": "Audio/8-Bit jingles/jingles_NES16.ogg",
+      "size": 14057
+    },
+    {
+      "path": "Audio/Hit jingles/jingles_HIT00.ogg",
+      "size": 8650
+    },
+    {
+      "path": "Audio/Hit jingles/jingles_HIT01.ogg",
+      "size": 11681
+    },
+    {
+      "path": "Audio/Hit jingles/jingles_HIT02.ogg",
+      "size": 11735
+    },
+    {
+      "path": "Audio/Hit jingles/jingles_HIT03.ogg",
+      "size": 13944
+    },
+    {
+      "path": "Audio/Hit jingles/jingles_HIT04.ogg",
+      "size": 11424
+    },
+    {
+      "path": "Audio/Hit jingles/jingles_HIT05.ogg",
+      "size": 13868
+    },
+    {
+      "path": "Audio/Hit jingles/jingles_HIT06.ogg",
+      "size": 11854
+    },
+    {
+      "path": "Audio/Hit jingles/jingles_HIT07.ogg",
+      "size": 8707
+    },
+    {
+      "path": "Audio/Hit jingles/jingles_HIT08.ogg",
+      "size": 8613
+    },
+    {
+      "path": "Audio/Hit jingles/jingles_HIT09.ogg",
+      "size": 15477
+    },
+    {
+      "path": "Audio/Hit jingles/jingles_HIT10.ogg",
+      "size": 15019
+    },
+    {
+      "path": "Audio/Hit jingles/jingles_HIT11.ogg",
+      "size": 17932
+    },
+    {
+      "path": "Audio/Hit jingles/jingles_HIT12.ogg",
+      "size": 8666
+    },
+    {
+      "path": "Audio/Hit jingles/jingles_HIT13.ogg",
+      "size": 8577
+    },
+    {
+      "path": "Audio/Hit jingles/jingles_HIT14.ogg",
+      "size": 10099
+    },
+    {
+      "path": "Audio/Hit jingles/jingles_HIT15.ogg",
+      "size": 19626
+    },
+    {
+      "path": "Audio/Hit jingles/jingles_HIT16.ogg",
+      "size": 8445
+    },
+    {
+      "path": "Audio/Pizzicato jingles/jingles_PIZZI00.ogg",
+      "size": 10382
+    },
+    {
+      "path": "Audio/Pizzicato jingles/jingles_PIZZI01.ogg",
+      "size": 16579
+    },
+    {
+      "path": "Audio/Pizzicato jingles/jingles_PIZZI02.ogg",
+      "size": 16360
+    },
+    {
+      "path": "Audio/Pizzicato jingles/jingles_PIZZI03.ogg",
+      "size": 16981
+    },
+    {
+      "path": "Audio/Pizzicato jingles/jingles_PIZZI04.ogg",
+      "size": 11052
+    },
+    {
+      "path": "Audio/Pizzicato jingles/jingles_PIZZI05.ogg",
+      "size": 10291
+    },
+    {
+      "path": "Audio/Pizzicato jingles/jingles_PIZZI06.ogg",
+      "size": 11867
+    },
+    {
+      "path": "Audio/Pizzicato jingles/jingles_PIZZI07.ogg",
+      "size": 19137
+    },
+    {
+      "path": "Audio/Pizzicato jingles/jingles_PIZZI08.ogg",
+      "size": 10825
+    },
+    {
+      "path": "Audio/Pizzicato jingles/jingles_PIZZI09.ogg",
+      "size": 10872
+    },
+    {
+      "path": "Audio/Pizzicato jingles/jingles_PIZZI10.ogg",
+      "size": 14004
+    },
+    {
+      "path": "Audio/Pizzicato jingles/jingles_PIZZI11.ogg",
+      "size": 13830
+    },
+    {
+      "path": "Audio/Pizzicato jingles/jingles_PIZZI12.ogg",
+      "size": 15969
+    },
+    {
+      "path": "Audio/Pizzicato jingles/jingles_PIZZI13.ogg",
+      "size": 14644
+    },
+    {
+      "path": "Audio/Pizzicato jingles/jingles_PIZZI14.ogg",
+      "size": 15212
+    },
+    {
+      "path": "Audio/Pizzicato jingles/jingles_PIZZI15.ogg",
+      "size": 13905
+    },
+    {
+      "path": "Audio/Pizzicato jingles/jingles_PIZZI16.ogg",
+      "size": 10201
+    },
+    {
+      "path": "Audio/Sax jingles/jingles_SAX00.ogg",
+      "size": 10335
+    },
+    {
+      "path": "Audio/Sax jingles/jingles_SAX01.ogg",
+      "size": 17409
+    },
+    {
+      "path": "Audio/Sax jingles/jingles_SAX02.ogg",
+      "size": 17112
+    },
+    {
+      "path": "Audio/Sax jingles/jingles_SAX03.ogg",
+      "size": 19785
+    },
+    {
+      "path": "Audio/Sax jingles/jingles_SAX04.ogg",
+      "size": 9786
+    },
+    {
+      "path": "Audio/Sax jingles/jingles_SAX05.ogg",
+      "size": 10183
+    },
+    {
+      "path": "Audio/Sax jingles/jingles_SAX06.ogg",
+      "size": 11167
+    },
+    {
+      "path": "Audio/Sax jingles/jingles_SAX07.ogg",
+      "size": 30900
+    },
+    {
+      "path": "Audio/Sax jingles/jingles_SAX08.ogg",
+      "size": 9989
+    },
+    {
+      "path": "Audio/Sax jingles/jingles_SAX09.ogg",
+      "size": 10023
+    },
+    {
+      "path": "Audio/Sax jingles/jingles_SAX10.ogg",
+      "size": 13565
+    },
+    {
+      "path": "Audio/Sax jingles/jingles_SAX11.ogg",
+      "size": 13737
+    },
+    {
+      "path": "Audio/Sax jingles/jingles_SAX12.ogg",
+      "size": 16903
+    },
+    {
+      "path": "Audio/Sax jingles/jingles_SAX13.ogg",
+      "size": 15654
+    },
+    {
+      "path": "Audio/Sax jingles/jingles_SAX14.ogg",
+      "size": 15119
+    },
+    {
+      "path": "Audio/Sax jingles/jingles_SAX15.ogg",
+      "size": 13560
+    },
+    {
+      "path": "Audio/Sax jingles/jingles_SAX16.ogg",
+      "size": 10588
+    },
+    {
+      "path": "Audio/Steel jingles/jingles_STEEL00.ogg",
+      "size": 15691
+    },
+    {
+      "path": "Audio/Steel jingles/jingles_STEEL01.ogg",
+      "size": 21019
+    },
+    {
+      "path": "Audio/Steel jingles/jingles_STEEL02.ogg",
+      "size": 21919
+    },
+    {
+      "path": "Audio/Steel jingles/jingles_STEEL03.ogg",
+      "size": 19117
+    },
+    {
+      "path": "Audio/Steel jingles/jingles_STEEL04.ogg",
+      "size": 14951
+    },
+    {
+      "path": "Audio/Steel jingles/jingles_STEEL05.ogg",
+      "size": 15082
+    },
+    {
+      "path": "Audio/Steel jingles/jingles_STEEL06.ogg",
+      "size": 18893
+    },
+    {
+      "path": "Audio/Steel jingles/jingles_STEEL07.ogg",
+      "size": 22460
+    },
+    {
+      "path": "Audio/Steel jingles/jingles_STEEL08.ogg",
+      "size": 13885
+    },
+    {
+      "path": "Audio/Steel jingles/jingles_STEEL09.ogg",
+      "size": 11145
+    },
+    {
+      "path": "Audio/Steel jingles/jingles_STEEL10.ogg",
+      "size": 16151
+    },
+    {
+      "path": "Audio/Steel jingles/jingles_STEEL11.ogg",
+      "size": 14615
+    },
+    {
+      "path": "Audio/Steel jingles/jingles_STEEL12.ogg",
+      "size": 18971
+    },
+    {
+      "path": "Audio/Steel jingles/jingles_STEEL13.ogg",
+      "size": 17122
+    },
+    {
+      "path": "Audio/Steel jingles/jingles_STEEL14.ogg",
+      "size": 20532
+    },
+    {
+      "path": "Audio/Steel jingles/jingles_STEEL15.ogg",
+      "size": 16113
+    },
+    {
+      "path": "Audio/Steel jingles/jingles_STEEL16.ogg",
+      "size": 15473
+    },
+    {
+      "path": "License.txt",
+      "size": 482
+    }
+  ],
+  "downloaded_at": "2026-10-08T11:00:09Z"
+}

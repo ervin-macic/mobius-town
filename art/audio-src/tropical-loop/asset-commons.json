@@ -1,0 +1,32 @@
+{
+  "asset_commons": "0.5.0",
+  "asset_id": "opengameart:tropical-loop",
+  "title": "Tropical Loop",
+  "type": "music",
+  "source": "opengameart",
+  "source_name": "OpenGameArt",
+  "source_url": "https://opengameart.org/content/tropical-loop",
+  "authors": [
+    {
+      "name": "wipics",
+      "url": "https://opengameart.org/users/wipics"
+    }
+  ],
+  "license": {
+    "id": "CC0-1.0",
+    "name": "Creative Commons Zero 1.0 Universal",
+    "url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "attribution_required": false,
+    "share_alike": false
+  },
+  "credit": "“Tropical Loop” by wipics, OpenGameArt (https://opengameart.org/content/tropical-loop) — CC0, no attribution required.",
+  "variant": "Tropical.wav",
+  "files": [
+    {
+      "path": "Tropical.wav",
+      "size": 3151066,
+      "md5": null
+    }
+  ],
+  "downloaded_at": "2026-10-08T11:22:22Z"
+}

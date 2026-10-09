@@ -1,0 +1,32 @@
+{
+  "asset_commons": "0.5.0",
+  "asset_id": "opengameart:flowerbed-fields-loop",
+  "title": "Flowerbed Fields [Loop]",
+  "type": "music",
+  "source": "opengameart",
+  "source_name": "OpenGameArt",
+  "source_url": "https://opengameart.org/content/flowerbed-fields-loop",
+  "authors": [
+    {
+      "name": "Zane Little Music",
+      "url": "https://opengameart.org/users/zane-little-music"
+    }
+  ],
+  "license": {
+    "id": "CC0-1.0",
+    "name": "Creative Commons Zero 1.0 Universal",
+    "url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "attribution_required": false,
+    "share_alike": false
+  },
+  "credit": "“Flowerbed Fields [Loop]” by Zane Little Music, OpenGameArt (https://opengameart.org/content/flowerbed-fields-loop) — CC0, no attribution required.",
+  "variant": "flowerbed_fields.ogg",
+  "files": [
+    {
+      "path": "flowerbed_fields.ogg",
+      "size": 1724097,
+      "md5": null
+    }
+  ],
+  "downloaded_at": "2026-10-08T11:22:33Z"
+}

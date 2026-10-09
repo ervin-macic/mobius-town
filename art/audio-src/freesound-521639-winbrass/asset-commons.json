@@ -1,0 +1,32 @@
+{
+  "asset_commons": "0.5.0",
+  "asset_id": "freesound:521639",
+  "title": "WinBrass",
+  "type": "sound",
+  "source": "freesound",
+  "source_name": "Freesound",
+  "source_url": "https://freesound.org/people/Fupicat/sounds/521639/",
+  "authors": [
+    {
+      "name": "Fupicat",
+      "url": "https://freesound.org/people/Fupicat/"
+    }
+  ],
+  "license": {
+    "id": "CC0-1.0",
+    "name": "Creative Commons Zero 1.0 Universal",
+    "url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "attribution_required": false,
+    "share_alike": false
+  },
+  "credit": "“WinBrass” by Fupicat, Freesound (https://freesound.org/people/Fupicat/sounds/521639/) — CC0, no attribution required.",
+  "variant": "hq-ogg",
+  "files": [
+    {
+      "path": "521639-winbrass.ogg",
+      "size": 42882,
+      "md5": null
+    }
+  ],
+  "downloaded_at": "2026-10-08T11:32:49Z"
+}

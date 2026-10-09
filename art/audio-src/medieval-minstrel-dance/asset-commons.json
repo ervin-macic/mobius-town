@@ -1,0 +1,32 @@
+{
+  "asset_commons": "0.5.0",
+  "asset_id": "opengameart:medieval-minstrel-dance",
+  "title": "Medieval: Minstrel Dance",
+  "type": "music",
+  "source": "opengameart",
+  "source_name": "OpenGameArt",
+  "source_url": "https://opengameart.org/content/medieval-minstrel-dance",
+  "authors": [
+    {
+      "name": "RandomMind",
+      "url": "https://opengameart.org/users/randommind"
+    }
+  ],
+  "license": {
+    "id": "CC0-1.0",
+    "name": "Creative Commons Zero 1.0 Universal",
+    "url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "attribution_required": false,
+    "share_alike": false
+  },
+  "credit": "“Medieval: Minstrel Dance” by RandomMind, OpenGameArt (https://opengameart.org/content/medieval-minstrel-dance) — CC0, no attribution required.",
+  "variant": "Loop_Minstrel_Dance.wav",
+  "files": [
+    {
+      "path": "Loop_Minstrel_Dance.wav",
+      "size": 19865506,
+      "md5": null
+    }
+  ],
+  "downloaded_at": "2026-10-08T11:22:20Z"
+}

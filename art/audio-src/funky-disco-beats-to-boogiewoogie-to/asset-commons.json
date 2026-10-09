@@ -1,0 +1,32 @@
+{
+  "asset_commons": "0.5.0",
+  "asset_id": "opengameart:funky-disco-beats-to-boogiewoogie-to",
+  "title": "Funky Disco Beats to Boogie/Woogie to",
+  "type": "music",
+  "source": "opengameart",
+  "source_name": "OpenGameArt",
+  "source_url": "https://opengameart.org/content/funky-disco-beats-to-boogiewoogie-to",
+  "authors": [
+    {
+      "name": "Fupi",
+      "url": "https://opengameart.org/users/fupi"
+    }
+  ],
+  "license": {
+    "id": "CC0-1.0",
+    "name": "Creative Commons Zero 1.0 Universal",
+    "url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "attribution_required": false,
+    "share_alike": false
+  },
+  "credit": "“Funky Disco Beats to Boogie/Woogie to” by Fupi, OpenGameArt (https://opengameart.org/content/funky-disco-beats-to-boogiewoogie-to) — CC0, no attribution required.",
+  "variant": "funkydiscobeatstoboogieslashwoogieto.flac",
+  "files": [
+    {
+      "path": "funkydiscobeatstoboogieslashwoogieto.flac",
+      "size": 14544578,
+      "md5": null
+    }
+  ],
+  "downloaded_at": "2026-10-08T11:22:31Z"
+}

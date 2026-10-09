@@ -1,0 +1,247 @@
+{
+  "asset_commons": "0.5.0",
+  "asset_id": "kenney:rpg-audio",
+  "title": "RPG Audio",
+  "type": "sound",
+  "source": "kenney",
+  "source_name": "Kenney",
+  "source_url": "https://kenney.nl/assets/rpg-audio",
+  "authors": [
+    {
+      "name": "Kenney",
+      "url": "https://kenney.nl"
+    }
+  ],
+  "license": {
+    "id": "CC0-1.0",
+    "name": "Creative Commons Zero 1.0 Universal",
+    "url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "attribution_required": false,
+    "share_alike": false
+  },
+  "credit": "“RPG Audio” by Kenney (https://kenney.nl/assets/rpg-audio) — CC0, no attribution required.",
+  "variant": "zip",
+  "files": [
+    {
+      "path": "License.txt",
+      "size": 478
+    },
+    {
+      "path": "Preview.ogg",
+      "size": 321120
+    },
+    {
+      "path": "Visit Kenney.url",
+      "size": 45
+    },
+    {
+      "path": "Visit Patreon.url",
+      "size": 55
+    },
+    {
+      "path": "Audio/beltHandle1.ogg",
+      "size": 10820
+    },
+    {
+      "path": "Audio/beltHandle2.ogg",
+      "size": 15410
+    },
+    {
+      "path": "Audio/bookClose.ogg",
+      "size": 9292
+    },
+    {
+      "path": "Audio/bookFlip1.ogg",
+      "size": 18248
+    },
+    {
+      "path": "Audio/bookFlip2.ogg",
+      "size": 12393
+    },
+    {
+      "path": "Audio/bookFlip3.ogg",
+      "size": 9077
+    },
+    {
+      "path": "Audio/bookOpen.ogg",
+      "size": 8273
+    },
+    {
+      "path": "Audio/bookPlace1.ogg",
+      "size": 9901
+    },
+    {
+      "path": "Audio/bookPlace2.ogg",
+      "size": 11185
+    },
+    {
+      "path": "Audio/bookPlace3.ogg",
+      "size": 9570
+    },
+    {
+      "path": "Audio/chop.ogg",
+      "size": 9370
+    },
+    {
+      "path": "Audio/cloth1.ogg",
+      "size": 16508
+    },
+    {
+      "path": "Audio/cloth2.ogg",
+      "size": 11787
+    },
+    {
+      "path": "Audio/cloth3.ogg",
+      "size": 12432
+    },
+    {
+      "path": "Audio/cloth4.ogg",
+      "size": 11043
+    },
+    {
+      "path": "Audio/clothBelt.ogg",
+      "size": 21491
+    },
+    {
+      "path": "Audio/clothBelt2.ogg",
+      "size": 20013
+    },
+    {
+      "path": "Audio/creak1.ogg",
+      "size": 15761
+    },
+    {
+      "path": "Audio/creak2.ogg",
+      "size": 19012
+    },
+    {
+      "path": "Audio/creak3.ogg",
+      "size": 10408
+    },
+    {
+      "path": "Audio/doorClose_1.ogg",
+      "size": 18564
+    },
+    {
+      "path": "Audio/doorClose_2.ogg",
+      "size": 17598
+    },
+    {
+      "path": "Audio/doorClose_3.ogg",
+      "size": 20889
+    },
+    {
+      "path": "Audio/doorClose_4.ogg",
+      "size": 16902
+    },
+    {
+      "path": "Audio/doorOpen_1.ogg",
+      "size": 22848
+    },
+    {
+      "path": "Audio/doorOpen_2.ogg",
+      "size": 30280
+    },
+    {
+      "path": "Audio/drawKnife1.ogg",
+      "size": 11134
+    },
+    {
+      "path": "Audio/drawKnife2.ogg",
+      "size": 12395
+    },
+    {
+      "path": "Audio/drawKnife3.ogg",
+      "size": 12726
+    },
+    {
+      "path": "Audio/dropLeather.ogg",
+      "size": 11695
+    },
+    {
+      "path": "Audio/footstep00.ogg",
+      "size": 9475
+    },
+    {
+      "path": "Audio/footstep01.ogg",
+      "size": 9900
+    },
+    {
+      "path": "Audio/footstep02.ogg",
+      "size": 9528
+    },
+    {
+      "path": "Audio/footstep03.ogg",
+      "size": 10559
+    },
+    {
+      "path": "Audio/footstep04.ogg",
+      "size": 11303
+    },
+    {
+      "path": "Audio/footstep05.ogg",
+      "size": 10288
+    },
+    {
+      "path": "Audio/footstep06.ogg",
+      "size": 9885
+    },
+    {
+      "path": "Audio/footstep07.ogg",
+      "size": 10264
+    },
+    {
+      "path": "Audio/footstep08.ogg",
+      "size": 9242
+    },
+    {
+      "path": "Audio/footstep09.ogg",
+      "size": 9356
+    },
+    {
+      "path": "Audio/handleCoins.ogg",
+      "size": 25394
+    },
+    {
+      "path": "Audio/handleCoins2.ogg",
+      "size": 13094
+    },
+    {
+      "path": "Audio/handleSmallLeather.ogg",
+      "size": 10492
+    },
+    {
+      "path": "Audio/handleSmallLeather2.ogg",
+      "size": 10028
+    },
+    {
+      "path": "Audio/knifeSlice.ogg",
+      "size": 15532
+    },
+    {
+      "path": "Audio/knifeSlice2.ogg",
+      "size": 15099
+    },
+    {
+      "path": "Audio/metalClick.ogg",
+      "size": 13615
+    },
+    {
+      "path": "Audio/metalLatch.ogg",
+      "size": 10208
+    },
+    {
+      "path": "Audio/metalPot1.ogg",
+      "size": 31619
+    },
+    {
+      "path": "Audio/metalPot2.ogg",
+      "size": 22471
+    },
+    {
+      "path": "Audio/metalPot3.ogg",
+      "size": 23142
+    }
+  ],
+  "downloaded_at": "2026-10-08T11:00:12Z"
+}

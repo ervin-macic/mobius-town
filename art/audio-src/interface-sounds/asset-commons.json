@@ -1,0 +1,439 @@
+{
+  "asset_commons": "0.5.0",
+  "asset_id": "kenney:interface-sounds",
+  "title": "Interface Sounds",
+  "type": "sound",
+  "source": "kenney",
+  "source_name": "Kenney",
+  "source_url": "https://kenney.nl/assets/interface-sounds",
+  "authors": [
+    {
+      "name": "Kenney",
+      "url": "https://kenney.nl"
+    }
+  ],
+  "license": {
+    "id": "CC0-1.0",
+    "name": "Creative Commons Zero 1.0 Universal",
+    "url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "attribution_required": false,
+    "share_alike": false
+  },
+  "credit": "“Interface Sounds” by Kenney (https://kenney.nl/assets/interface-sounds) — CC0, no attribution required.",
+  "variant": "zip",
+  "files": [
+    {
+      "path": "License.txt",
+      "size": 574
+    },
+    {
+      "path": "Patreon.url",
+      "size": 55
+    },
+    {
+      "path": "Audio/back_001.ogg",
+      "size": 6997
+    },
+    {
+      "path": "Audio/back_002.ogg",
+      "size": 7029
+    },
+    {
+      "path": "Audio/back_003.ogg",
+      "size": 7208
+    },
+    {
+      "path": "Audio/back_004.ogg",
+      "size": 6923
+    },
+    {
+      "path": "Audio/bong_001.ogg",
+      "size": 4848
+    },
+    {
+      "path": "Audio/click_001.ogg",
+      "size": 4876
+    },
+    {
+      "path": "Audio/click_002.ogg",
+      "size": 4275
+    },
+    {
+      "path": "Audio/click_003.ogg",
+      "size": 4371
+    },
+    {
+      "path": "Audio/click_004.ogg",
+      "size": 4486
+    },
+    {
+      "path": "Audio/click_005.ogg",
+      "size": 4410
+    },
+    {
+      "path": "Audio/close_001.ogg",
+      "size": 9915
+    },
+    {
+      "path": "Audio/close_002.ogg",
+      "size": 14752
+    },
+    {
+      "path": "Audio/close_003.ogg",
+      "size": 15648
+    },
+    {
+      "path": "Audio/close_004.ogg",
+      "size": 16263
+    },
+    {
+      "path": "Audio/confirmation_001.ogg",
+      "size": 8968
+    },
+    {
+      "path": "Audio/confirmation_002.ogg",
+      "size": 14169
+    },
+    {
+      "path": "Audio/confirmation_003.ogg",
+      "size": 9535
+    },
+    {
+      "path": "Audio/confirmation_004.ogg",
+      "size": 12391
+    },
+    {
+      "path": "Audio/drop_001.ogg",
+      "size": 5859
+    },
+    {
+      "path": "Audio/drop_002.ogg",
+      "size": 6411
+    },
+    {
+      "path": "Audio/drop_003.ogg",
+      "size": 6288
+    },
+    {
+      "path": "Audio/drop_004.ogg",
+      "size": 7230
+    },
+    {
+      "path": "Audio/error_001.ogg",
+      "size": 7373
+    },
+    {
+      "path": "Audio/error_002.ogg",
+      "size": 7369
+    },
+    {
+      "path": "Audio/error_003.ogg",
+      "size": 12256
+    },
+    {
+      "path": "Audio/error_004.ogg",
+      "size": 6393
+    },
+    {
+      "path": "Audio/error_005.ogg",
+      "size": 7266
+    },
+    {
+      "path": "Audio/error_006.ogg",
+      "size": 8288
+    },
+    {
+      "path": "Audio/error_007.ogg",
+      "size": 10225
+    },
+    {
+      "path": "Audio/error_008.ogg",
+      "size": 9215
+    },
+    {
+      "path": "Audio/glass_001.ogg",
+      "size": 6103
+    },
+    {
+      "path": "Audio/glass_002.ogg",
+      "size": 4917
+    },
+    {
+      "path": "Audio/glass_003.ogg",
+      "size": 5732
+    },
+    {
+      "path": "Audio/glass_004.ogg",
+      "size": 8323
+    },
+    {
+      "path": "Audio/glass_005.ogg",
+      "size": 6206
+    },
+    {
+      "path": "Audio/glass_006.ogg",
+      "size": 6956
+    },
+    {
+      "path": "Audio/glitch_001.ogg",
+      "size": 5121
+    },
+    {
+      "path": "Audio/glitch_002.ogg",
+      "size": 5473
+    },
+    {
+      "path": "Audio/glitch_003.ogg",
+      "size": 4915
+    },
+    {
+      "path": "Audio/glitch_004.ogg",
+      "size": 5225
+    },
+    {
+      "path": "Audio/maximize_001.ogg",
+      "size": 12111
+    },
+    {
+      "path": "Audio/maximize_002.ogg",
+      "size": 9915
+    },
+    {
+      "path": "Audio/maximize_003.ogg",
+      "size": 11748
+    },
+    {
+      "path": "Audio/maximize_004.ogg",
+      "size": 17723
+    },
+    {
+      "path": "Audio/maximize_005.ogg",
+      "size": 20900
+    },
+    {
+      "path": "Audio/maximize_006.ogg",
+      "size": 11618
+    },
+    {
+      "path": "Audio/maximize_007.ogg",
+      "size": 8097
+    },
+    {
+      "path": "Audio/maximize_008.ogg",
+      "size": 9085
+    },
+    {
+      "path": "Audio/maximize_009.ogg",
+      "size": 7650
+    },
+    {
+      "path": "Audio/minimize_001.ogg",
+      "size": 11924
+    },
+    {
+      "path": "Audio/minimize_002.ogg",
+      "size": 9441
+    },
+    {
+      "path": "Audio/minimize_003.ogg",
+      "size": 11739
+    },
+    {
+      "path": "Audio/minimize_004.ogg",
+      "size": 17099
+    },
+    {
+      "path": "Audio/minimize_005.ogg",
+      "size": 19501
+    },
+    {
+      "path": "Audio/minimize_006.ogg",
+      "size": 11292
+    },
+    {
+      "path": "Audio/minimize_007.ogg",
+      "size": 7677
+    },
+    {
+      "path": "Audio/minimize_008.ogg",
+      "size": 9298
+    },
+    {
+      "path": "Audio/minimize_009.ogg",
+      "size": 7665
+    },
+    {
+      "path": "Audio/open_001.ogg",
+      "size": 9834
+    },
+    {
+      "path": "Audio/open_002.ogg",
+      "size": 14975
+    },
+    {
+      "path": "Audio/open_003.ogg",
+      "size": 15046
+    },
+    {
+      "path": "Audio/open_004.ogg",
+      "size": 15879
+    },
+    {
+      "path": "Audio/pluck_001.ogg",
+      "size": 6317
+    },
+    {
+      "path": "Audio/pluck_002.ogg",
+      "size": 6941
+    },
+    {
+      "path": "Audio/question_001.ogg",
+      "size": 11700
+    },
+    {
+      "path": "Audio/question_002.ogg",
+      "size": 9455
+    },
+    {
+      "path": "Audio/question_003.ogg",
+      "size": 8233
+    },
+    {
+      "path": "Audio/question_004.ogg",
+      "size": 9821
+    },
+    {
+      "path": "Audio/scratch_001.ogg",
+      "size": 8989
+    },
+    {
+      "path": "Audio/scratch_002.ogg",
+      "size": 9319
+    },
+    {
+      "path": "Audio/scratch_003.ogg",
+      "size": 8849
+    },
+    {
+      "path": "Audio/scratch_004.ogg",
+      "size": 16478
+    },
+    {
+      "path": "Audio/scratch_005.ogg",
+      "size": 15824
+    },
+    {
+      "path": "Audio/scroll_001.ogg",
+      "size": 21633
+    },
+    {
+      "path": "Audio/scroll_002.ogg",
+      "size": 24628
+    },
+    {
+      "path": "Audio/scroll_003.ogg",
+      "size": 29488
+    },
+    {
+      "path": "Audio/scroll_004.ogg",
+      "size": 20348
+    },
+    {
+      "path": "Audio/scroll_005.ogg",
+      "size": 20448
+    },
+    {
+      "path": "Audio/select_001.ogg",
+      "size": 5468
+    },
+    {
+      "path": "Audio/select_002.ogg",
+      "size": 5463
+    },
+    {
+      "path": "Audio/select_003.ogg",
+      "size": 6901
+    },
+    {
+      "path": "Audio/select_004.ogg",
+      "size": 6909
+    },
+    {
+      "path": "Audio/select_005.ogg",
+      "size": 6767
+    },
+    {
+      "path": "Audio/select_006.ogg",
+      "size": 8101
+    },
+    {
+      "path": "Audio/select_007.ogg",
+      "size": 6580
+    },
+    {
+      "path": "Audio/select_008.ogg",
+      "size": 6339
+    },
+    {
+      "path": "Audio/switch_001.ogg",
+      "size": 6753
+    },
+    {
+      "path": "Audio/switch_002.ogg",
+      "size": 7097
+    },
+    {
+      "path": "Audio/switch_003.ogg",
+      "size": 9653
+    },
+    {
+      "path": "Audio/switch_004.ogg",
+      "size": 7248
+    },
+    {
+      "path": "Audio/switch_005.ogg",
+      "size": 7814
+    },
+    {
+      "path": "Audio/switch_006.ogg",
+      "size": 7873
+    },
+    {
+      "path": "Audio/switch_007.ogg",
+      "size": 7921
+    },
+    {
+      "path": "Audio/tick_001.ogg",
+      "size": 4497
+    },
+    {
+      "path": "Audio/tick_002.ogg",
+      "size": 4514
+    },
+    {
+      "path": "Audio/tick_004.ogg",
+      "size": 5031
+    },
+    {
+      "path": "Audio/toggle_001.ogg",
+      "size": 7369
+    },
+    {
+      "path": "Audio/toggle_002.ogg",
+      "size": 8056
+    },
+    {
+      "path": "Audio/toggle_003.ogg",
+      "size": 8654
+    },
+    {
+      "path": "Audio/toggle_004.ogg",
+      "size": 6695
+    },
+    {
+      "path": "Kenney.url",
+      "size": 45
+    }
+  ],
+  "downloaded_at": "2026-10-08T11:00:10Z"
+}

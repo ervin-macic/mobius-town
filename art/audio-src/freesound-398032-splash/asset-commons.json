@@ -1,0 +1,32 @@
+{
+  "asset_commons": "0.5.0",
+  "asset_id": "freesound:398032",
+  "title": "Splash",
+  "type": "sound",
+  "source": "freesound",
+  "source_name": "Freesound",
+  "source_url": "https://freesound.org/people/swordofkings128/sounds/398032/",
+  "authors": [
+    {
+      "name": "swordofkings128",
+      "url": "https://freesound.org/people/swordofkings128/"
+    }
+  ],
+  "license": {
+    "id": "CC0-1.0",
+    "name": "Creative Commons Zero 1.0 Universal",
+    "url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "attribution_required": false,
+    "share_alike": false
+  },
+  "credit": "“Splash” by swordofkings128, Freesound (https://freesound.org/people/swordofkings128/sounds/398032/) — CC0, no attribution required.",
+  "variant": "hq-ogg",
+  "files": [
+    {
+      "path": "398032-splash.ogg",
+      "size": 36513,
+      "md5": null
+    }
+  ],
+  "downloaded_at": "2026-10-08T11:32:48Z"
+}

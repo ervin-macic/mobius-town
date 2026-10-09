@@ -1,0 +1,247 @@
+{
+  "asset_commons": "0.5.0",
+  "asset_id": "kenney:ui-audio",
+  "title": "UI Audio",
+  "type": "sound",
+  "source": "kenney",
+  "source_name": "Kenney",
+  "source_url": "https://kenney.nl/assets/ui-audio",
+  "authors": [
+    {
+      "name": "Kenney",
+      "url": "https://kenney.nl"
+    }
+  ],
+  "license": {
+    "id": "CC0-1.0",
+    "name": "Creative Commons Zero 1.0 Universal",
+    "url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "attribution_required": false,
+    "share_alike": false
+  },
+  "credit": "“UI Audio” by Kenney (https://kenney.nl/assets/ui-audio) — CC0, no attribution required.",
+  "variant": "zip",
+  "files": [
+    {
+      "path": "Preview.ogg",
+      "size": 171143
+    },
+    {
+      "path": "Visit Kenney.url",
+      "size": 45
+    },
+    {
+      "path": "Visit Patreon.url",
+      "size": 55
+    },
+    {
+      "path": "Audio/click1.ogg",
+      "size": 4983
+    },
+    {
+      "path": "Audio/click2.ogg",
+      "size": 4656
+    },
+    {
+      "path": "Audio/click3.ogg",
+      "size": 4880
+    },
+    {
+      "path": "Audio/click4.ogg",
+      "size": 4558
+    },
+    {
+      "path": "Audio/click5.ogg",
+      "size": 4532
+    },
+    {
+      "path": "Audio/mouseclick1.ogg",
+      "size": 4686
+    },
+    {
+      "path": "Audio/mouserelease1.ogg",
+      "size": 4775
+    },
+    {
+      "path": "Audio/rollover1.ogg",
+      "size": 5932
+    },
+    {
+      "path": "Audio/rollover2.ogg",
+      "size": 4701
+    },
+    {
+      "path": "Audio/rollover3.ogg",
+      "size": 4778
+    },
+    {
+      "path": "Audio/rollover4.ogg",
+      "size": 5188
+    },
+    {
+      "path": "Audio/rollover5.ogg",
+      "size": 5258
+    },
+    {
+      "path": "Audio/rollover6.ogg",
+      "size": 5385
+    },
+    {
+      "path": "Audio/switch1.ogg",
+      "size": 6104
+    },
+    {
+      "path": "Audio/switch10.ogg",
+      "size": 6456
+    },
+    {
+      "path": "Audio/switch11.ogg",
+      "size": 6248
+    },
+    {
+      "path": "Audio/switch12.ogg",
+      "size": 4588
+    },
+    {
+      "path": "Audio/switch13.ogg",
+      "size": 4467
+    },
+    {
+      "path": "Audio/switch14.ogg",
+      "size": 4522
+    },
+    {
+      "path": "Audio/switch15.ogg",
+      "size": 6325
+    },
+    {
+      "path": "Audio/switch16.ogg",
+      "size": 6991
+    },
+    {
+      "path": "Audio/switch17.ogg",
+      "size": 6686
+    },
+    {
+      "path": "Audio/switch18.ogg",
+      "size": 7633
+    },
+    {
+      "path": "Audio/switch19.ogg",
+      "size": 7177
+    },
+    {
+      "path": "Audio/switch2.ogg",
+      "size": 6042
+    },
+    {
+      "path": "Audio/switch20.ogg",
+      "size": 6965
+    },
+    {
+      "path": "Audio/switch21.ogg",
+      "size": 7453
+    },
+    {
+      "path": "Audio/switch22.ogg",
+      "size": 7116
+    },
+    {
+      "path": "Audio/switch23.ogg",
+      "size": 7177
+    },
+    {
+      "path": "Audio/switch24.ogg",
+      "size": 6340
+    },
+    {
+      "path": "Audio/switch25.ogg",
+      "size": 7130
+    },
+    {
+      "path": "Audio/switch26.ogg",
+      "size": 6031
+    },
+    {
+      "path": "Audio/switch27.ogg",
+      "size": 6445
+    },
+    {
+      "path": "Audio/switch28.ogg",
+      "size": 5916
+    },
+    {
+      "path": "Audio/switch29.ogg",
+      "size": 6769
+    },
+    {
+      "path": "Audio/switch3.ogg",
+      "size": 6270
+    },
+    {
+      "path": "Audio/switch30.ogg",
+      "size": 7151
+    },
+    {
+      "path": "Audio/switch31.ogg",
+      "size": 8180
+    },
+    {
+      "path": "Audio/switch32.ogg",
+      "size": 7868
+    },
+    {
+      "path": "Audio/switch33.ogg",
+      "size": 8530
+    },
+    {
+      "path": "Audio/switch34.ogg",
+      "size": 7910
+    },
+    {
+      "path": "Audio/switch35.ogg",
+      "size": 6935
+    },
+    {
+      "path": "Audio/switch36.ogg",
+      "size": 6616
+    },
+    {
+      "path": "Audio/switch37.ogg",
+      "size": 6822
+    },
+    {
+      "path": "Audio/switch38.ogg",
+      "size": 7303
+    },
+    {
+      "path": "Audio/switch4.ogg",
+      "size": 6477
+    },
+    {
+      "path": "Audio/switch5.ogg",
+      "size": 6181
+    },
+    {
+      "path": "Audio/switch6.ogg",
+      "size": 6610
+    },
+    {
+      "path": "Audio/switch7.ogg",
+      "size": 5707
+    },
+    {
+      "path": "Audio/switch8.ogg",
+      "size": 6253
+    },
+    {
+      "path": "Audio/switch9.ogg",
+      "size": 6009
+    },
+    {
+      "path": "License.txt",
+      "size": 479
+    }
+  ],
+  "downloaded_at": "2026-10-08T11:00:11Z"
+}

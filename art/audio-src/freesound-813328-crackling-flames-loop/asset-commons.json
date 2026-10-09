@@ -1,0 +1,32 @@
+{
+  "asset_commons": "0.5.0",
+  "asset_id": "freesound:813328",
+  "title": "Crackling Flames (loop)",
+  "type": "sound",
+  "source": "freesound",
+  "source_name": "Freesound",
+  "source_url": "https://freesound.org/people/NickTayloe/sounds/813328/",
+  "authors": [
+    {
+      "name": "NickTayloe",
+      "url": "https://freesound.org/people/NickTayloe/"
+    }
+  ],
+  "license": {
+    "id": "CC0-1.0",
+    "name": "Creative Commons Zero 1.0 Universal",
+    "url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "attribution_required": false,
+    "share_alike": false
+  },
+  "credit": "“Crackling Flames (loop)” by NickTayloe, Freesound (https://freesound.org/people/NickTayloe/sounds/813328/) — CC0, no attribution required.",
+  "variant": "hq-ogg",
+  "files": [
+    {
+      "path": "813328-crackling-flames-loop.ogg",
+      "size": 1321478,
+      "md5": null
+    }
+  ],
+  "downloaded_at": "2026-10-08T11:32:42Z"
+}

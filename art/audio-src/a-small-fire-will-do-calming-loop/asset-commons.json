@@ -1,0 +1,32 @@
+{
+  "asset_commons": "0.5.0",
+  "asset_id": "opengameart:a-small-fire-will-do-calming-loop",
+  "title": "A Small Fire Will Do (Calming Loop)",
+  "type": "music",
+  "source": "opengameart",
+  "source_name": "OpenGameArt",
+  "source_url": "https://opengameart.org/content/a-small-fire-will-do-calming-loop",
+  "authors": [
+    {
+      "name": "Trex0n",
+      "url": "https://opengameart.org/users/trex0n"
+    }
+  ],
+  "license": {
+    "id": "CC0-1.0",
+    "name": "Creative Commons Zero 1.0 Universal",
+    "url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "attribution_required": false,
+    "share_alike": false
+  },
+  "credit": "“A Small Fire Will Do (Calming Loop)” by Trex0n, OpenGameArt (https://opengameart.org/content/a-small-fire-will-do-calming-loop) — CC0, no attribution required.",
+  "variant": "a_small_fire_will_do.wav",
+  "files": [
+    {
+      "path": "a_small_fire_will_do.wav",
+      "size": 16934546,
+      "md5": null
+    }
+  ],
+  "downloaded_at": "2026-10-08T11:22:14Z"
+}

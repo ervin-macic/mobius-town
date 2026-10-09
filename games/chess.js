@@ -91,6 +91,11 @@ function squareIndex(name) {
   return (7 - r) * 8 + f
 }
 
+/** a8 (index 0) is a light square, and so is h1: each player has a light square at their right hand. */
+function isLightIndex(sq) {
+  return (Math.floor(sq / 8) + (sq % 8)) % 2 === 0
+}
+
 // ---------------------------------------------------------------- attacks
 
 /** True when square index `sq` is attacked by side `by` ('w' or 'b'). */
@@ -366,7 +371,7 @@ function insufficientMaterial(board) {
     if (piece === 'N' || piece === 'n') {
       knights++
     } else if (piece === 'B' || piece === 'b') {
-      if ((Math.floor(sq / 8) + (sq % 8)) % 2 === 0) lightBishops++ // a8 (index 0) is a light square
+      if (isLightIndex(sq)) lightBishops++
       else darkBishops++
     } else {
       return false // a pawn, rook or queen can always force or allow mate
@@ -582,4 +587,11 @@ export function kingSquare(state, color) {
   if (color !== 'w' && color !== 'b') return null
   const sq = state.board.indexOf(color === 'w' ? 'K' : 'k')
   return sq < 0 ? null : SQUARES[sq]
+}
+
+/** True for a light square ('a8', 'h1', 'e4'), false for a dark one ('a1', 'h8', 'd4'): how to paint the board. */
+export function isLightSquare(square) {
+  const sq = squareIndex(square)
+  if (sq < 0) throw new Error(`Not a square: ${square}`)
+  return isLightIndex(sq)
 }

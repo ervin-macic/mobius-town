@@ -11,6 +11,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import {
   START_FEN, parseFen, toFen, positionKey, legalMoves, applyMove, gameStatus, moveToSan, pieceAt, kingSquare,
+  isLightSquare,
 } from '../games/chess.js'
 import { COLS, ROWS, newGame, legalColumns, drop, status as c4Status } from '../games/connect4.js'
 
@@ -128,6 +129,22 @@ test('pieceAt and kingSquare', () => {
   assert.equal(kingSquare(state, 'b'), 'e8')
   assert.equal(kingSquare(state, 'x'), null)
   assert.equal(kingSquare(parseFen(KIWIPETE), 'b'), 'e8')
+})
+
+test('board colours put a light square at each player\'s right hand', () => {
+  // The square colours the chess board is painted with (they were once swapped in the game).
+  assert.equal(isLightSquare('h1'), true) // White's right-hand corner
+  assert.equal(isLightSquare('a8'), true) // Black's right-hand corner
+  assert.equal(isLightSquare('a1'), false)
+  assert.equal(isLightSquare('h8'), false)
+  assert.equal(isLightSquare('d1'), true) // the queen starts on her own colour
+  assert.equal(isLightSquare('d8'), false)
+  assert.equal(isLightSquare('e4'), true)
+  assert.equal(isLightSquare('d4'), false)
+  let light = 0
+  for (const f of 'abcdefgh') for (const r of '12345678') if (isLightSquare(f + r)) light++
+  assert.equal(light, 32)
+  for (const square of ['z9', 'e', '', null]) assert.throws(() => isLightSquare(square))
 })
 
 test('positionKey drops the counters', () => {

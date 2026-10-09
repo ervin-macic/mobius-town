@@ -178,8 +178,7 @@ function ChessOverlay({ town, state, table, waiting }) {
           {[...ranks].map((r, ri) => [...files].map((f, fi) => {
             const sq = f + r
             const piece = chess.pieceAt(board, sq)
-            const dark = (('abcdefgh'.indexOf(f) + Number(r)) % 2) === 0
-            const cls = ['mt-sq', dark ? 'is-dark' : 'is-light']
+            const cls = ['mt-sq', chess.isLightSquare(sq) ? 'is-light' : 'is-dark']
             if (selected === sq) cls.push('is-sel')
             if (last && (last.slice(0, 2) === sq || last.slice(2, 4) === sq)) cls.push('is-last')
             if (checkSquare === sq) cls.push('is-check')

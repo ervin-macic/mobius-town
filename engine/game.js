@@ -4,8 +4,8 @@ import { DEFAULT_LOOK, loadAtlas, loadCharacters, loadGround, normalizeLook, T }
 import { doorAt, findPath, getMap, lockDoors, objectsAt, roomAt, seatAt, spawnNear, tileKind } from './maps.js'
 import { drawScene } from './render.js'
 import { catsOn } from './cats.js'
+import { heading, MIN_TAP, walk, WALK_SPEED } from './motion.js'
 
-const STEP_SECONDS = 0.17 // one tile per 170 ms (~5.9 tiles/s)
 export const ZOOM_MIN = 0.5
 export const ZOOM_MAX = 2.5
 export const ZOOM_STEP = 1.2 // each button press or key zooms 20%
@@ -15,7 +15,7 @@ function makeAvatar(id, name, look, mapId, x, y, dir = 'down') {
   return {
     id, name, look: normalizeLook(look), mapId, x, y, fx: x, fy: y, dir,
     moving: false, walkT: 0, emote: null, chat: null, speaking: 0, status: '',
-    from: null, to: null, stepT: 0, path: [], muted: false, seat: null, dance: null,
+    path: [], muted: false, seat: null, dance: null,
   }
 }
 
@@ -30,7 +30,15 @@ export class Game {
     this.map = getMap('town')
     this.others = new Map()
     this.world = { locks: {}, bubbles: {}, tv: {}, games: {} }
+    // Walking: the arrow keys held now (in press order; the last one sets your facing), when
+    // each was pressed, and short taps still being walked out (a tap moves a little, not a tile).
     this.held = []
+    this.pressedAt = {}
+    this.nudge = {}
+    // The chair you just stood up from: you don't sit straight back down on it.
+    this.sitBlock = null
+    this.lastBump = 0
+    this.blocker = (x, y) => tileKind(this.map, x, y) === 1 || this.isBlocked(x, y)
     // Zoom: 1 is the default distance; the drawn level glides to the target.
     this.zoomLevel = 1
     this.zoomTarget = 1
@@ -145,6 +153,30 @@ export class Game {
   setWorld(world) {
     this.world = world || this.world
     this.markUi()
+    this.leaveLockedRoom()
+  }
+
+  /**
+   * News of a lock can reach you a moment after you walked in. Inside a room locked without
+   * you, you step back out through its door.
+   */
+  leaveLockedRoom() {
+    const me = this.me
+    const room = roomAt(this.map, me.x, me.y)
+    if (!room?.lockable || !room.door) return false
+    const lock = this.world.locks?.[`${this.mapId}:${room.id}`]
+    if (!lock || (lock.allow || []).includes(me.id)) return false
+    const [dx, dy] = room.door
+    const out = [[dx + 1, dy], [dx - 1, dy], [dx, dy + 1], [dx, dy - 1]]
+      .find(([x, y]) => tileKind(this.map, x, y) === 0 && roomAt(this.map, x, y)?.id !== room.id)
+    if (!out) return false
+    Object.assign(me, { x: out[0], y: out[1], fx: out[0], fy: out[1], path: [], seat: null, moving: false })
+    this.clearHeld()
+    this.afterPath = null
+    this.markUi()
+    this.onEvent('step', { mapId: this.mapId, x: out[0], y: out[1], dir: me.dir })
+    this.onEvent('lockedout', { room: room.id, name: room.name })
+    return true
   }
 
   upsertOther(id, state) {
@@ -155,19 +187,29 @@ export class Game {
     }
     if (state.name) a.name = state.name
     if (state.look) a.look = normalizeLook(state.look)
+    // Newer towns also send the exact position (fx, fy); x, y stay the whole tile for older ones.
+    const precise = Number.isFinite(state.fx) && Number.isFinite(state.fy)
+    const tx = precise ? state.fx : state.x
+    const ty = precise ? state.fy : state.y
     if (state.mapId && state.mapId !== a.mapId) {
       a.mapId = state.mapId
-      a.fx = state.x
-      a.fy = state.y
+      a.fx = tx
+      a.fy = ty
     }
     if (Number.isFinite(state.x) && Number.isFinite(state.y)) {
       // Snap long jumps (doors, teleports); otherwise glide.
-      if (Math.abs(state.x - a.fx) + Math.abs(state.y - a.fy) > 4) {
-        a.fx = state.x
-        a.fy = state.y
+      if (Math.abs(tx - a.fx) + Math.abs(ty - a.fy) > 4) {
+        a.fx = tx
+        a.fy = ty
       }
       a.x = state.x
       a.y = state.y
+      a.tx = tx
+      a.ty = ty
+    }
+    if ('moving' in state) {
+      a.netMoving = !!state.moving
+      a.netAt = this.time
     }
     if (state.dir) a.dir = state.dir
     if ('status' in state) a.status = state.status || ''
@@ -244,26 +286,69 @@ export class Game {
   setFrozen(frozen) {
     this.frozen = frozen
     if (frozen) {
-      this.held = []
+      this.clearHeld()
       this.me.path = []
     }
     this.markUi()
   }
 
+  /** An arrow key went down: walk that way (with any others held, so two make a diagonal). */
   pressDir(dir) {
-    if (!this.held.includes(dir)) this.held.push(dir)
+    if (!DIRS[dir]) return
+    if (!this.held.includes(dir)) {
+      this.held.push(dir)
+      this.pressedAt[dir] = this.time
+    }
     this.me.path = []
     this.route = null
     this.afterPath = null
-    if (!this.me.moving) this.tryStep(dir)
+    if (this.frozen || this.pendingDoor) return
+    const me = this.me
+    if (me.dance) {
+      me.dance = null
+      this.onEvent('dance', { song: null })
+    }
+    if (me.seat) this.standUp(dir)
+    else this.face(dir)
   }
 
   releaseDir(dir) {
+    if (!this.held.includes(dir)) return
     this.held = this.held.filter((d) => d !== dir)
+    // A quick tap is still walked out for MIN_TAP, so it nudges you a little way.
+    const until = (this.pressedAt[dir] ?? this.time) + MIN_TAP
+    if (until > this.time) this.nudge[dir] = until
   }
 
   clearHeld() {
     this.held = []
+    this.nudge = {}
+  }
+
+  face(dir) {
+    if (this.me.dir === dir) return
+    this.me.dir = dir
+    this.onEvent('turn', { dir })
+  }
+
+  /** Get up from a chair: step off it in `dir` when that tile is free, else just stand. */
+  standUp(dir) {
+    const me = this.me
+    me.seat = null
+    this.sitBlock = `${me.x},${me.y}`
+    this.onEvent('stand', {})
+    me.dir = dir
+    const [dx, dy] = DIRS[dir]
+    if (this.canEnter(me.x + dx, me.y + dy)) me.path = [[me.x + dx, me.y + dy]]
+    this.markUi()
+  }
+
+  sit(seat) {
+    const me = this.me
+    Object.assign(me, { fx: seat.x, fy: seat.y, x: seat.x, y: seat.y, seat, dir: seat.face, moving: false })
+    this.clearHeld()
+    this.onEvent('sit', { seat })
+    this.markUi()
   }
 
   isBlocked(x, y) {
@@ -278,55 +363,32 @@ export class Game {
     return tileKind(this.map, x, y) !== 1 && !this.isBlocked(x, y)
   }
 
-  tryStep(dir) {
-    if (this.frozen || this.pendingDoor) return false
-    const [dx, dy] = DIRS[dir]
-    this.me.dir = dir
-    const nx = this.me.x + dx
-    const ny = this.me.y + dy
-    if (!this.canEnter(nx, ny)) {
-      if (this.isBlocked(nx, ny)) this.onEvent('blocked', { x: nx, y: ny })
-      this.markUi()
-      this.onEvent('turn', { dir })
-      return false
-    }
-    this.me.from = { x: this.me.x, y: this.me.y }
-    this.me.to = { x: nx, y: ny }
-    this.me.stepT = 0
-    this.me.moving = true
-    if (this.me.seat) {
-      this.me.seat = null
-      this.onEvent('stand', {})
-    }
-    if (this.me.dance) {
-      this.me.dance = null
-      this.onEvent('dance', { song: null })
-    }
-    this.onEvent('stepstart', { x: nx, y: ny, dir })
-    return true
-  }
-
+  /** Walk to a tile along a path (round props and locked doors); `then` runs on arrival. */
   walkTo(x, y, then = null) {
     if (this.frozen) return
-    const path = findPath(this.map, this.me.x, this.me.y, x, y, (bx, by) => this.isBlocked(bx, by))
+    const me = this.me
+    const path = findPath(this.map, me.x, me.y, x, y, (bx, by) => this.isBlocked(bx, by))
     if (!path) {
       // Explain a locked door rather than silently refusing to move.
-      const open = findPath(this.map, this.me.x, this.me.y, x, y)
+      const open = findPath(this.map, me.x, me.y, x, y)
       const lockedStep = open?.find(([bx, by]) => this.isBlocked(bx, by))
       if (lockedStep) this.onEvent('blocked', { x: lockedStep[0], y: lockedStep[1] })
       this.route = null
       return
     }
-    this.me.path = path
+    // Paths run tile centre to tile centre: first settle onto the tile you are on.
+    if (Math.abs(me.fx - me.x) > 0.01 || Math.abs(me.fy - me.y) > 0.01) path.unshift([me.x, me.y])
+    if (me.seat && path.length) {
+      me.seat = null
+      this.sitBlock = `${me.x},${me.y}`
+      this.onEvent('stand', {})
+    }
+    me.path = path
     this.afterPath = then
-    this.held = []
-    if (!this.me.moving) this.advancePath()
+    this.clearHeld()
+    if (!path.length) this.arrivePath()
   }
 
-  /**
-   * Walk to a tile on any map, going through doors as needed. `then` runs on
-   * arrival. Manual movement cancels the route.
-   */
   routeTo(mapId, x, y, then = null) {
     if (this.frozen) return false
     if (mapId === this.mapId) {
@@ -345,65 +407,76 @@ export class Game {
     return true
   }
 
-  advancePath() {
-    const next = this.me.path.shift()
-    if (!next) {
-      const then = this.afterPath
-      this.afterPath = null
-      if (then) then()
-      return
+  /** Glide along me.path at walking speed; returns whether you moved. */
+  followPath(dt) {
+    const me = this.me
+    let budget = WALK_SPEED * dt
+    let moved = false
+    while (budget > 1e-9 && me.path.length) {
+      const [nx, ny] = me.path[0]
+      const dx = nx - me.fx, dy = ny - me.fy
+      const d = Math.hypot(dx, dy)
+      if (d > 1e-6) {
+        const dir = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up')
+        if (dir !== me.dir) me.dir = dir
+      }
+      if (d <= budget) {
+        me.fx = nx
+        me.fy = ny
+        budget -= d
+        moved = moved || d > 1e-6
+        me.path.shift()
+        if (!me.path.length) {
+          this.enterTile()
+          if (!this.pendingDoor) this.arrivePath()
+        }
+      } else {
+        me.fx += (dx / d) * budget
+        me.fy += (dy / d) * budget
+        budget = 0
+        moved = true
+      }
     }
-    const dx = next[0] - this.me.x
-    const dy = next[1] - this.me.y
-    const dir = dx > 0 ? 'right' : dx < 0 ? 'left' : dy > 0 ? 'down' : 'up'
-    if (!this.tryStep(dir)) this.me.path = []
+    return moved
   }
 
-  arrive() {
+  /** The end of a walk: sit on a chair there, then run the walk's follow-up. */
+  arrivePath() {
     const me = this.me
-    me.x = me.to.x
-    me.y = me.to.y
-    me.fx = me.x
-    me.fy = me.y
-    me.moving = false
-    me.from = me.to = null
-    this.markUi()
-    this.onEvent('step', { mapId: this.mapId, x: me.x, y: me.y, dir: me.dir })
-    const door = doorAt(this.map, me.x, me.y)
-    if (door) {
-      this.useDoor(door)
-      return
-    }
     const seat = seatAt(this.map, me.x, me.y)
-    if (seat && !me.path.length) {
-      // Walking onto a chair sits you down; any direction key stands you up again.
-      me.seat = seat
-      me.dir = seat.face
-      this.held = []
-      this.onEvent('sit', { seat })
-      this.markUi()
-      if (this.afterPath) {
-        const then = this.afterPath
-        this.afterPath = null
-        then()
-      }
-      return
-    }
-    if (this.held.length) {
-      this.tryStep(this.held[this.held.length - 1])
-    } else if (me.path.length) {
-      this.advancePath()
-    } else if (this.afterPath) {
-      const then = this.afterPath
-      this.afterPath = null
-      then()
-    }
+    if (seat && this.sitBlock !== `${me.x},${me.y}`) this.sit(seat)
+    const then = this.afterPath
+    this.afterPath = null
+    if (then) then()
+  }
+
+  /** Bookkeeping when the tile under your feet changes: tell the town, take a door. */
+  enterTile() {
+    const me = this.me
+    const x = Math.round(me.fx), y = Math.round(me.fy)
+    if (x === me.x && y === me.y) return
+    me.x = x
+    me.y = y
+    if (this.sitBlock && this.sitBlock !== `${x},${y}`) this.sitBlock = null
+    this.markUi()
+    this.onEvent('step', { mapId: this.mapId, x, y, dir: me.dir })
+    const door = doorAt(this.map, x, y)
+    if (door && !this.pendingDoor) this.useDoor(door)
+  }
+
+  /** Walking into a locked door asks whether to knock (at most once a second). */
+  bump(h) {
+    const me = this.me
+    const x = me.x + Math.sign(Math.round(h.x)), y = me.y + Math.sign(Math.round(h.y))
+    if (!this.isBlocked(x, y) || this.time - this.lastBump < 1) return
+    this.lastBump = this.time
+    this.onEvent('blocked', { x, y })
   }
 
   useDoor(door) {
     this.pendingDoor = door
     this.fadeTarget = 1
-    this.held = []
+    this.clearHeld()
     this.me.path = []
   }
 
@@ -425,7 +498,9 @@ export class Game {
     this.mapId = mapId
     this.map = getMap(mapId)
     this.lockDoorTiles = lockDoors(this.map)
-    Object.assign(this.me, { mapId, x, y, fx: x, fy: y, dir, moving: false, from: null, to: null, path: [], seat: null })
+    Object.assign(this.me, { mapId, x, y, fx: x, fy: y, dir, moving: false, path: [], seat: null })
+    this.nudge = {}
+    this.sitBlock = null
     this.snapCamera = true
     this.markUi()
     if (changed) this.onEvent('map', { mapId, x, y, dir })
@@ -509,29 +584,53 @@ export class Game {
       this.markUi()
     }
     const me = this.me
-    if (me.moving) {
-      me.stepT += dt / STEP_SECONDS
-      me.walkT += dt
-      const t = Math.min(1, me.stepT)
-      me.fx = me.from.x + (me.to.x - me.from.x) * t
-      me.fy = me.from.y + (me.to.y - me.from.y) * t
-      if (me.stepT >= 1) this.arrive()
-    } else {
-      me.walkT = 0
+    let moved = false
+    if (!this.frozen && !this.pendingDoor) {
+      if (me.path.length) {
+        moved = this.followPath(dt)
+      } else {
+        for (const [d, until] of Object.entries(this.nudge)) if (until <= this.time) delete this.nudge[d]
+        const h = heading([...this.held, ...Object.keys(this.nudge)])
+        if (h && !me.seat) {
+          const r = walk(this.blocker, me.fx, me.fy, h, dt)
+          if (r.moved) {
+            me.fx = r.x
+            me.fy = r.y
+            moved = true
+          }
+          if (r.hitX || r.hitY) this.bump(h)
+          const last = this.held[this.held.length - 1]
+          if (last) this.face(last)
+        }
+      }
+    }
+    me.moving = moved
+    me.walkT = moved ? me.walkT + dt : 0
+    if (!this.pendingDoor) this.enterTile()
+    // Coming to rest on a chair sits you down (but not straight back onto the one you left).
+    const resting = !moved && !this.held.length && !Object.keys(this.nudge).length && !me.path.length
+    if (resting && !me.seat && !this.pendingDoor && !this.frozen) {
+      const seat = seatAt(this.map, me.x, me.y)
+      if (seat && this.sitBlock !== `${me.x},${me.y}`) this.sit(seat)
     }
     for (const a of this.others.values()) {
-      const dx = a.x - a.fx
-      const dy = a.y - a.fy
+      const dx = (a.tx ?? a.x) - a.fx
+      const dy = (a.ty ?? a.y) - a.fy
       const dist = Math.hypot(dx, dy)
-      const speed = (1 / STEP_SECONDS) * (dist > 2 ? 2.2 : 1.05)
+      const speed = WALK_SPEED * (dist > 2 ? 2.2 : 1.1)
       if (dist > 0.001) {
         const stepLen = Math.min(dist, speed * dt)
         a.fx += (dx / dist) * stepLen
         a.fy += (dy / dist) * stepLen
         a.walkT += dt
         a.moving = true
-        if (Math.abs(dx) > Math.abs(dy)) a.dir = dx > 0 ? 'right' : 'left'
-        else if (Math.abs(dy) > 0.01) a.dir = dy > 0 ? 'down' : 'up'
+        // Face the way they walk; on a diagonal keep the facing they sent.
+        if (Math.abs(dx) > 1.5 * Math.abs(dy)) a.dir = dx > 0 ? 'right' : 'left'
+        else if (Math.abs(dy) > 1.5 * Math.abs(dx)) a.dir = dy > 0 ? 'down' : 'up'
+      } else if (a.netMoving && this.time - (a.netAt ?? -1) < 0.3) {
+        // Caught up between two updates of someone still walking: keep the stride going.
+        a.walkT += dt
+        a.moving = true
       } else {
         a.moving = false
         a.walkT = 0

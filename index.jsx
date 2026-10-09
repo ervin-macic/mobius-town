@@ -63,6 +63,8 @@ export default function App({ appId, token }) {
   const [identity, setIdentity] = useState(null)
   const townRef = useRef(null)
   const [town, setTown] = useState(null)
+  // Leaving the town ends this visit for good; coming back builds a fresh town.
+  const [visit, setVisit] = useState(0)
 
   useEffect(() => {
     let alive = true
@@ -90,7 +92,13 @@ export default function App({ appId, token }) {
       alive = false
       t.destroy()
     }
-  }, [appId, token])
+  }, [appId, token, visit])
+
+  /** Leave the town: the game, its sound and every connection stop until you come back. */
+  const leave = useCallback(() => {
+    townRef.current?.destroy()
+    setPhase('left')
+  }, [])
 
   const enter = useCallback((next) => {
     const p = { ...profile, ...next }
@@ -114,14 +122,30 @@ export default function App({ appId, token }) {
         />
       )}
       {phase === 'play' && town && (
-        <GameView town={town} profile={profile} identity={identity}
+        <GameView town={town} profile={profile} identity={identity} onLeave={leave}
           onProfile={(p) => { setProfile(p); saveProfile({ name: p.name, look: p.look, audio: p.audio, video: p.video, sound: p.sound, danceSong: p.danceSong, zoom: p.zoom }) }} />
+      )}
+      {phase === 'left' && (
+        <div className="mt-cover" role="dialog" aria-modal="true" aria-labelledby="mt-left-title">
+          <div className="mt-card">
+            <h1 id="mt-left-title" className="mt-title">MÖBIUS TOWN</h1>
+            <p className="mt-lede">
+              You've left the town. The game, its music and your connection to the other Möbians have all stopped.
+            </p>
+            <div className="mt-actions">
+              <button type="button" className="mt-btn is-primary" onClick={() => { setPhase('loading'); setVisit((v) => v + 1) }}>
+                Enter again
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
 }
 
 const KICK_KEYS = new Set([' ', 'x', 'X', 'e', 'E', 'k', 'K'])
+const PASS_KEYS = new Set(['q', 'Q', 'z', 'Z'])
 
 const KEY_DIR = {
   ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right',
@@ -133,7 +157,7 @@ function isTyping(target) {
   return tag === 'INPUT' || tag === 'TEXTAREA' || target?.isContentEditable
 }
 
-function GameView({ town, profile, identity, onProfile }) {
+function GameView({ town, profile, identity, onProfile, onLeave }) {
   const canvasRef = useRef(null)
   const [ready, setReady] = useState(false)
   const [panel, setPanel] = useState(null)
@@ -218,6 +242,11 @@ function GameView({ town, profile, identity, onProfile }) {
           if (!e.repeat) town.football.kick(true)
           return
         }
+        if (PASS_KEYS.has(e.key)) {
+          e.preventDefault()
+          if (!e.repeat) town.football.pass(true)
+          return
+        }
       }
       if (e.key === 'Escape') {
         // A party is modal: Leave (with its confirmation) is the way out until the final screen.
@@ -263,11 +292,13 @@ function GameView({ town, profile, identity, onProfile }) {
       if (dir) town.game?.releaseDir(dir)
       if (dir) town.football.key(dir, false)
       if (KICK_KEYS.has(e.key)) town.football.kick(false)
+      if (PASS_KEYS.has(e.key)) town.football.pass(false)
     }
     const blur = () => {
       town.game?.clearHeld()
       town.football.keys.clear()
       town.football.kick(false)
+      town.football.pass(false)
     }
     window.addEventListener('keydown', down)
     window.addEventListener('keyup', up)
@@ -326,6 +357,7 @@ function GameView({ town, profile, identity, onProfile }) {
             sound={state.sound}
             onSound={(prefs) => { town.setSoundPrefs(prefs); onProfile({ ...profile, sound: { ...state.sound, ...prefs } }) }}
             onEvents={() => setPanel((p) => (p === 'events' ? null : 'events'))}
+            onLeave={onLeave}
             eventsLive={(state.world.events || []).filter((ev) => ev.starts <= town.serverNow() && town.serverNow() <= ev.starts + ev.minutes * 60_000).length}
           />
           {state.ui?.mapId === 'hall' && <LiveTalk talk={state.liveTalk} />}

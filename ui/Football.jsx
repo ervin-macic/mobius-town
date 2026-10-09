@@ -57,7 +57,7 @@ export function PitchLobby({ town, state }) {
             className={`mt-btn mt-fb-level${fb.level === id ? ' is-on' : ''}`} onClick={() => town.setPitchLevel(id)}>{label}</button>
         ))}
       </div>
-      <p className="mt-note">Arrows or WASD to run, Space to kick. Three minutes; empty places are bots.</p>
+      <p className="mt-note">Arrows or WASD to run, Space to kick, Q to pass. Three minutes; empty places are bots.</p>
       <div className="mt-actions">
         <button type="button" className="mt-btn" onClick={() => town.joinPitch(side === 'red' ? 'blue' : 'red')}>
           Switch to {side === 'red' ? 'blue' : 'red'}
@@ -105,7 +105,16 @@ export function Scoreboard({ town, state }) {
   )
 }
 
-/** Phones: a thumb stick on the left and a kick button on the right. */
+/** A button held under a finger: onHold(true) on press, onHold(false) on release or cancel. */
+function HoldButton({ className, onHold, children }) {
+  return (
+    <button type="button" className={`${className} mt-pixel`}
+      onPointerDown={(e) => { e.preventDefault(); onHold(true) }}
+      onPointerUp={() => onHold(false)} onPointerCancel={() => onHold(false)}>{children}</button>
+  )
+}
+
+/** Phones: a thumb stick on the left; pass and kick buttons on the right. */
 export function TouchPad({ town, state }) {
   const m = state.football.match
   const active = !!m && m.player && !m.ended
@@ -138,9 +147,10 @@ export function TouchPad({ town, state }) {
         onPointerMove={(e) => { if (knob) move(e) }} onPointerUp={end} onPointerCancel={end}>
         <span style={knob ? { transform: `translate(${knob.dx * 34}px, ${knob.dy * 34}px)` } : undefined} />
       </div>
-      <button type="button" className="mt-fb-kick mt-pixel"
-        onPointerDown={(e) => { e.preventDefault(); town.football.kick(true) }}
-        onPointerUp={() => town.football.kick(false)} onPointerCancel={() => town.football.kick(false)}>Kick</button>
+      <div className="mt-fb-buttons">
+        <HoldButton className="mt-fb-pass" onHold={(down) => town.football.pass(down)}>Pass</HoldButton>
+        <HoldButton className="mt-fb-kick" onHold={(down) => town.football.kick(down)}>Kick</HoldButton>
+      </div>
     </div>
   )
 }

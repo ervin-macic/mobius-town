@@ -3,7 +3,7 @@
 // The hub (hub.py) keeps the line-up: four places, red0 red1 blue0 blue1, each a person or empty
 // (a bot). When a match starts, one person's browser, the host, runs games/football.js at 60 Hz
 // and sends a compact snapshot about 15 times a second over the direct peer connections; the
-// other players send their stick and kick button to the host about 20 times a second and draw the
+// other players send their stick, kick and pass buttons to the host about 20 times a second and draw the
 // match one snapshot behind, smoothly interpolated. Spectators just draw the snapshots. When the
 // host leaves, the hub names a new host, who carries on from the last snapshot it received.
 import {
@@ -32,9 +32,10 @@ export class MatchController {
     this.keys = new Set()
     this.stick = null
     this.kickDown = false
+    this.passDown = false
     this.lastInputAt = 0
     this.lastSnapAt = 0
-    this.inputs = new Map() // host: pid -> { mx, my, kick, at }
+    this.inputs = new Map() // host: pid -> { mx, my, kick, pass, at, q }
     this.lastSummaryKey = ''
     this.reported = new Set()
     this.seq = 0
@@ -74,6 +75,7 @@ export class MatchController {
     this.reported.clear()
     this.keys.clear()
     this.kickDown = false
+    this.passDown = false
     this.stick = null
     if (this.isPlayer()) this.town.onMatchStart?.(this.match)
   }
@@ -85,6 +87,8 @@ export class MatchController {
       // A new host carries on from the newest snapshot, not the blended frame a few ticks
       // behind it; otherwise it restarts in the past and everyone drops its snapshots as stale.
       if (takingOver && match.to) decodeSnapshot(match.state, match.to)
+      // ...and goes on counting kicks from where the old host's count reached.
+      if (takingOver) match.kicks = match.kc ?? 0
       match.from = null
       match.to = null
       this.lastSnapAt = 0
@@ -155,6 +159,12 @@ export class MatchController {
     if (down) this.lastInputAt = 0 // send a press at once
   }
 
+  /** The pass button: the engine rolls the ball to the teammate (alone, a soft touch ahead). */
+  pass(down) {
+    this.passDown = down
+    if (down) this.lastInputAt = 0 // send a press at once
+  }
+
   setStick(mx, my) {
     this.stick = mx === 0 && my === 0 ? null : { mx, my }
   }
@@ -168,7 +178,7 @@ export class MatchController {
       if (this.keys.has('up')) my -= 1
       if (this.keys.has('down')) my += 1
     }
-    return { mx, my, kick: this.kickDown }
+    return { mx, my, kick: this.kickDown, pass: this.passDown }
   }
 
   // --- the frame loop ------------------------------------------------------------------------------
@@ -191,15 +201,17 @@ export class MatchController {
       }
       const events = stepMatch(match.state, inputs, dt)
       this.handleEvents(events, true)
+      match.kicks = (match.kicks || 0) + events.filter((e) => e.type === 'kick').length
       if (now - this.lastSnapAt >= SNAP_MS) {
         this.lastSnapAt = now
-        this.town.mesh.broadcast({ t: 'fbs', m: match.id, s: encodeSnapshot(match.state) }, false)
+        // kc: kicks and passes so far, so the other players hear every one of them.
+        this.town.mesh.broadcast({ t: 'fbs', m: match.id, s: encodeSnapshot(match.state), kc: match.kicks }, false)
       }
     } else {
       if (this.isPlayer() && now - this.lastInputAt >= INPUT_MS) {
         this.lastInputAt = now
-        const { mx, my, kick } = this.localInput()
-        this.town.mesh.send(match.host, { t: 'fbi', m: match.id, x: Math.round(mx * 100) / 100, y: Math.round(my * 100) / 100, k: kick ? 1 : 0, q: ++this.seq }, false)
+        const { mx, my, kick, pass } = this.localInput()
+        this.town.mesh.send(match.host, { t: 'fbi', m: match.id, x: Math.round(mx * 100) / 100, y: Math.round(my * 100) / 100, k: kick ? 1 : 0, p: pass ? 1 : 0, q: ++this.seq }, false)
       }
       if (match.from && match.to) {
         const alpha = Math.min(1, (now - match.toAt) / SNAP_MS)
@@ -218,12 +230,19 @@ export class MatchController {
       if (!Number.isFinite(mx) || !Number.isFinite(my)) return
       const prev = this.inputs.get(from)
       if (prev && typeof msg.q === 'number' && msg.q < prev.q) return
-      this.inputs.set(from, { mx: Math.max(-1, Math.min(1, mx)), my: Math.max(-1, Math.min(1, my)), kick: msg.k === 1, at: performance.now(), q: msg.q })
+      // A peer from before the pass button sends no p: it simply never passes.
+      this.inputs.set(from, { mx: Math.max(-1, Math.min(1, mx)), my: Math.max(-1, Math.min(1, my)), kick: msg.k === 1, pass: msg.p === 1, at: performance.now(), q: msg.q })
     } else if (msg.t === 'fbs' && !this.isHost() && Array.isArray(msg.s)) {
       const tick = snapshotTick(msg.s)
       if (tick == null || (match.to && tick <= snapshotTick(match.to))) return
-      // Ball suddenly much faster than before: a kick happened. Play its sound here too.
-      if (match.to && kicked(match.to, msg.s)) this.town.onMatchEvent?.({ type: 'kick' }, false)
+      // The host counts its kicks (passes too): play one when the count goes up. An older host
+      // sends no count, so then a ball that suddenly speeds up stands in for a kick.
+      if (Number.isInteger(msg.kc)) {
+        if (Number.isInteger(match.kc) && msg.kc > match.kc) this.town.onMatchEvent?.({ type: 'kick' }, false)
+        match.kc = msg.kc
+      } else if (match.to && kicked(match.to, msg.s)) {
+        this.town.onMatchEvent?.({ type: 'kick' }, false)
+      }
       match.from = match.to || msg.s
       match.to = msg.s
       match.toAt = performance.now()

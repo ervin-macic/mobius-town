@@ -152,6 +152,15 @@ class LockTests(HubCase):
     self.act(b, 'unlock', room='meet-a')
     self.assertNotIn('hall:meet-a', self.sync(a, state=self.hall('meet-a', 3, 4))['world']['locks'])
 
+  def test_people_the_locker_sees_inside_count_as_inside(self):
+    a = self.join('alice', state=self.hall('meet-a', 3, 4))
+    # Bob has just walked in: the hub still has him in the lobby, Alice's town sees him inside.
+    b = self.join('bob', state=self.hall('lobby', 10, 5))
+    c = self.join('carol', state=self.hall('lobby', 14, 10))
+    world = self.act(a, 'lock', inside=[a, b, 'nobody', 7])['world']
+    self.assertEqual(world['locks']['hall:meet-a']['allow'], sorted([a, b]))
+    self.assertNotIn(c, world['locks']['hall:meet-a']['allow'])
+
   def test_knock_reaches_insiders_and_admit_lets_the_guest_in(self):
     a = self.join('alice', state=self.hall('meet-b', 3, 12))
     c = self.join('carol', state=self.hall('lobby', 10, 13))
@@ -202,6 +211,14 @@ class TvAndChatTests(HubCase):
     world = self.act(a, 'tv', screen='tv', video='dQw4w9WgXcQ', title='Song')['world']
     self.assertEqual(world['tv']['tv']['video'], 'dQw4w9WgXcQ')
     self.assertEqual(self.act(a, 'tv', screen='tv', video=None)['world']['tv'], {})
+
+  def test_tv_keeps_a_plausible_video_length(self):
+    a = self.join('alice', state=st('cinema', 'cinema', 9, 4))
+    world = self.act(a, 'tv', screen='tv', video='dQw4w9WgXcQ', length=212)['world']
+    self.assertEqual(world['tv']['tv']['length'], 212)
+    for bad in (0, -5, 100_000, '212', True, 1.5):
+      world = self.act(a, 'tv', screen='tv', video='dQw4w9WgXcQ', length=bad)['world']
+      self.assertNotIn('length', world['tv']['tv'])
 
   def test_town_chat_is_rate_limited_and_bounded(self):
     a = self.join('alice')

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import {
-  Calendar, Chat, Group, HandWavingBye, Keyboard, Lock, LockKeyHole, Maps, Mic, MicOff, Minus, Music, Plus,
+  Calendar, Chat, ExitLogout, Group, HandWavingBye, Keyboard, Lock, LockKeyHole, Maps, Mic, MicOff, Minus, Music, Plus,
   SoundOffSpeaker, SoundOnReadOutLoudSpeaker, Users, Video, VideoFilledOff, X,
 } from '@openai/apps-sdk-ui/components/Icon'
 import AvatarCanvas from './AvatarCanvas.jsx'
@@ -105,7 +105,7 @@ export function LiveTalk({ talk }) {
   )
 }
 
-export function TopBar({ ui, status, online, roomLock, onLock, onHelp, places, onGo, sound, onSound, onEvents, eventsLive }) {
+export function TopBar({ ui, status, online, roomLock, onLock, onHelp, places, onGo, sound, onSound, onEvents, eventsLive, onLeave }) {
   const place = ui.room && ui.room.name !== ui.mapName ? ui.room.name : ui.mapName
   const dotClass = status === 'online' ? '' : status === 'connecting' ? ' is-warn' : ' is-off'
   const statusText = status === 'online'
@@ -142,6 +142,11 @@ export function TopBar({ ui, status, online, roomLock, onLock, onHelp, places, o
       <button type="button" className="mt-iconbtn mt-kbd-btn" aria-label="Keyboard controls" title="Controls" onClick={onHelp}>
         <Keyboard aria-hidden="true" />
       </button>
+      {onLeave && (
+        <button type="button" className="mt-iconbtn" aria-label="Leave town" title="Leave town: stop the game and its sound" onClick={onLeave}>
+          <ExitLogout aria-hidden="true" />
+        </button>
+      )}
       </div>
     </div>
   )
@@ -291,7 +296,8 @@ export function Toasts({ toasts, onDismiss }) {
 
 export function HelpCard({ onClose }) {
   const rows = [
-    ['Arrows / WASD', 'Walk (or tap anywhere to walk there)'],
+    ['Arrows / WASD', 'Walk (two at once for diagonals; tap for a small step)'],
+    ['Q / Z', 'Pass to your teammate (football)'],
     ['X / E / Space', 'Use what you are standing at'],
     ['Enter', 'Chat with the Möbians who can hear you'],
     ['B', 'Start or leave a conversation bubble'],

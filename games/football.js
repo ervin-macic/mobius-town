@@ -25,15 +25,19 @@
 //          TypeError for bad input. A bot is driven by chooseFootballInput
 //          whenever stepMatch gets no input for it; state.players[i].bot may be
 //          changed mid-match (e.g. to let a bot stand in for a dropped player).
-// inputs   { [playerId]: { mx, my, kick } }. mx, my: analog stick in [-1, 1]
+// inputs   { [playerId]: { mx, my, kick, pass } }. mx, my: analog stick in [-1, 1]
 //          (the vector is clamped to length 1, so diagonals are not faster).
 //          kick: the kick button is down. Held, it kicks whenever the ball is in
 //          reach and the cooldown allows; a press is remembered for ~0.12 s, so
-//          a tap just before the ball arrives still kicks. Missing = idle.
-// events   { type: 'kick', id } | { type: 'goal', team, scorer, own }
+//          a tap just before the ball arrives still kicks. pass: the pass button,
+//          with the same reach, memory and cooldown: it rolls the ball to the
+//          teammate (with none, a soft touch where the player faces) and wins
+//          over a kick pressed with it. Missing = idle; a missing pass = false.
+// events   { type: 'kick', id, pass? } | { type: 'goal', team, scorer, own }
 //          | { type: 'phase', phase } | { type: 'end', winner }
 //          | { type: 'post' } | { type: 'bounce' }, each with the `tick` it
-//          happened on. scorer: id of the last player to touch the ball, or of
+//          happened on. pass: true when the kick was a pass (a plain kick has
+//          no pass key). scorer: id of the last player to touch the ball, or of
 //          the scoring team's shooter when a defender only deflected the shot in
 //          (null if unknown); own: true for an own goal. Bounces and posts are
 //          rate-limited (at most one of each per 0.1 s).
@@ -121,6 +125,23 @@ const KICK_GAP = 5
 const KICK_DIST = PR + BR + KICK_GAP
 const KICK_COOLDOWN = 15 // ticks (0.25 s)
 const KICK_WINDOW = 7 // ticks a press waits for the ball to come into reach
+// A pass reaches the teammate at running pace: they can run onto it, and one
+// standing still stops it dead (E_TOUCH and the 3:1 mass leave it 5% of its speed).
+const PASS_ARRIVE_SPEED = PLAYER_SPEED
+// A pass leads a running teammate by the ball's travel time, but by at most this
+// many seconds: about how long a receiver runs on before reacting to the pass. A
+// longer lead sends the ball past a teammate who stops to take it; a shorter one
+// leaves it behind one who keeps running (0.5 s did best across both).
+const PASS_LEAD_MAX = 0.5
+// With no teammate (1v1) a pass is a soft touch where the player faces, half a
+// kick: it rolls about 100 px, so the player can push it past someone and run on.
+const PASS_SOLO_SPEED = KICK_POWER / 2
+// The passer's body lets their own pass through for 0.4 s, so a pass to a
+// teammate behind them rolls through their feet instead of bouncing off them.
+// The softest pass that must (to a teammate right behind, about 85 px/s) rolls
+// the ~24 px from the far edge of the kick reach to clear of a standing passer
+// in 20 ticks.
+const PASS_THROUGH_TICKS = 24
 const E_WALL = 0.6
 const E_NET = 0.25 // nets swallow the ball
 const E_POST = 0.6
@@ -156,7 +177,7 @@ export const TUNING = Object.freeze({
 
 const TEAMS = ['red', 'blue']
 const PHASES = ['kickoff', 'play', 'goal', 'ended']
-const IDLE = Object.freeze({ mx: 0, my: 0, kick: false })
+const IDLE = Object.freeze({ mx: 0, my: 0, kick: false, pass: false })
 
 const hasOwn = (object, key) => Object.prototype.hasOwnProperty.call(object, key)
 const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v)
@@ -197,7 +218,7 @@ export function createMatch({ players, seed = 1, duration = 180 } = {}) {
     }
     return {
       id, team, name: name || id, bot: level, index, slot: size[team] - 1,
-      x: 0, y: 0, vx: 0, vy: 0, facing: 0, cooldown: 0, kickWindow: 0, mem: null,
+      x: 0, y: 0, vx: 0, vy: 0, facing: 0, cooldown: 0, kickWindow: 0, passWindow: 0, passThrough: 0, mem: null,
     }
   })
   if (size.red === 0 || size.blue === 0) throw new TypeError('createMatch: each team needs a player')
@@ -263,6 +284,8 @@ function startKickoff(state, team) {
     p.facing = p.team === 'red' ? 0 : Math.PI
     p.cooldown = 0
     p.kickWindow = 0
+    p.passWindow = 0
+    p.passThrough = 0
     p.mem = null
   }
   const ball = state.ball
@@ -280,7 +303,7 @@ function readInput(input) {
   let my = typeof input.my === 'number' && Number.isFinite(input.my) ? input.my : 0
   const m = Math.sqrt(mx * mx + my * my)
   if (m > 1) { mx /= m; my /= m }
-  return { mx, my, kick: !!input.kick }
+  return { mx, my, kick: !!input.kick, pass: !!input.pass }
 }
 
 /**
@@ -293,7 +316,10 @@ export function stepMatch(state, inputs, dt) {
   const given = state.players.map(p => (inputs && typeof inputs === 'object' && hasOwn(inputs, p.id) ? readInput(inputs[p.id]) : null))
   // A press that arrives between ticks still counts at the next tick.
   if (state.phase !== 'kickoff') {
-    given.forEach((input, i) => { if (input && input.kick) state.players[i].kickWindow = KICK_WINDOW })
+    given.forEach((input, i) => {
+      if (input && input.kick) state.players[i].kickWindow = KICK_WINDOW
+      if (input && input.pass) state.players[i].passWindow = KICK_WINDOW
+    })
   }
   const seconds = typeof dt === 'number' && dt > 0 ? Math.min(dt, MAX_CALL_DT) : 0
   state.acc += Math.round(seconds * TICK_RATE * UNITS_PER_TICK)
@@ -324,7 +350,9 @@ function tick(state, given, events) {
     const p = players[i], input = controls[i]
     steer(p, input)
     if (input.kick) p.kickWindow = KICK_WINDOW
+    if (input.pass) p.passWindow = KICK_WINDOW
     if (p.cooldown > 0) p.cooldown--
+    if (p.passThrough > 0) p.passThrough--
   }
   for (const p of players) tryKick(state, p, events)
   const impact = { wall: 0, post: 0 }
@@ -370,26 +398,88 @@ function steer(p, input) {
   if (input.mx * input.mx + input.my * input.my > 0.04) p.facing = Math.atan2(input.my, input.mx)
 }
 
-/** Haxball rule: the kick pushes the ball straight away from the kicker's centre. */
+/**
+ * Kick or pass once the ball is in reach of a waiting press: both share the
+ * reach, the press memory and the cooldown. A kick follows the Haxball rule and
+ * pushes the ball straight away from the kicker's centre. A pass wins over a
+ * kick pressed with it, being the deliberate, aimed choice.
+ */
 function tryKick(state, p, events) {
-  if (p.kickWindow <= 0) return
+  if (p.kickWindow <= 0 && p.passWindow <= 0) return
   const ball = state.ball
   const dx = ball.x - p.x, dy = ball.y - p.y
   const d = Math.sqrt(dx * dx + dy * dy)
   if (p.cooldown > 0 || d > KICK_DIST) {
-    p.kickWindow--
+    if (p.kickWindow > 0) p.kickWindow--
+    if (p.passWindow > 0) p.passWindow--
     return
   }
-  const nx = d > 1e-9 ? dx / d : Math.cos(p.facing)
-  const ny = d > 1e-9 ? dy / d : Math.sin(p.facing)
-  ball.vx += nx * KICK_POWER
-  ball.vy += ny * KICK_POWER
-  limitBallSpeed(ball)
-  p.facing = Math.atan2(ny, nx)
+  const pass = p.passWindow > 0
+  if (pass) passBall(state, p)
+  else {
+    const nx = d > 1e-9 ? dx / d : Math.cos(p.facing)
+    const ny = d > 1e-9 ? dy / d : Math.sin(p.facing)
+    ball.vx += nx * KICK_POWER
+    ball.vy += ny * KICK_POWER
+    limitBallSpeed(ball)
+    p.facing = Math.atan2(ny, nx)
+  }
   p.cooldown = KICK_COOLDOWN
   p.kickWindow = 0
+  p.passWindow = 0
   touch(state, p)
-  events.push({ type: 'kick', id: p.id, tick: state.tick })
+  events.push(pass ? { type: 'kick', id: p.id, pass: true, tick: state.tick } : { type: 'kick', id: p.id, tick: state.tick })
+}
+
+/**
+ * A pass places the ball rather than striking it: the ball's velocity is set,
+ * not added to, so it rolls exactly where it is sent. To the teammate, it is
+ * aimed where they will be when it gets there (see PASS_LEAD_MAX), just hard
+ * enough to reach them at PASS_ARRIVE_SPEED and never harder than a kick, so a
+ * very long pass stops short. With no teammate, it rolls where the passer faces
+ * at PASS_SOLO_SPEED.
+ */
+function passBall(state, p) {
+  const ball = state.ball
+  const mate = state.players.find(q => q.team === p.team && q !== p)
+  let ux = Math.cos(p.facing), uy = Math.sin(p.facing), speed = PASS_SOLO_SPEED
+  if (mate) {
+    // Aim where the ball's centre and theirs get to at the same moment (timing it
+    // to first contact instead leaves the ball grazing a runner's back). The lead
+    // depends on the travel time, which depends on the lead: two rounds settle it.
+    let tx = mate.x, ty = mate.y
+    for (let round = 0; round < 2; round++) {
+      const d = dist(ball.x, ball.y, tx, ty)
+      const lead = Math.min(PASS_LEAD_MAX, rollTime(d, passSpeed(d)))
+      tx = clamp(mate.x + mate.vx * lead, BR, W - BR)
+      ty = clamp(mate.y + mate.vy * lead, BR, H - BR)
+    }
+    const d = dist(ball.x, ball.y, tx, ty)
+    if (d > 1e-9) { ux = (tx - ball.x) / d; uy = (ty - ball.y) / d }
+    speed = passSpeed(d)
+  }
+  ball.vx = ux * speed
+  ball.vy = uy * speed
+  p.facing = Math.atan2(uy, ux)
+  p.passThrough = PASS_THROUGH_TICKS
+}
+
+/**
+ * The strike that has a pass meet a receiver d px away (centre to centre, so
+ * it touches them PR + BR sooner) at PASS_ARRIVE_SPEED; at most a kick.
+ */
+function passSpeed(d) {
+  return Math.min(KICK_POWER, PASS_ARRIVE_SPEED + BALL_FRICTION * Math.max(0, d - PR - BR))
+}
+
+/**
+ * Seconds a ball rolling at v0 takes to cover s px, or Infinity if it stops
+ * first. Friction takes the same speed off every pixel rolled
+ * (v = v0 - BALL_FRICTION * s); wall bounces are ignored.
+ */
+function rollTime(s, v0) {
+  const left = 1 - BALL_FRICTION * s / v0
+  return left > 0 ? -Math.log(left) / BALL_FRICTION : Infinity
 }
 
 function touch(state, p) {
@@ -420,6 +510,7 @@ function moveAndCollide(state, impact) {
     for (let j = i + 1; j < players.length; j++) collide(players[i], players[j], PR + PR, INV_PLAYER_MASS, INV_PLAYER_MASS, E_PLAYERS)
   }
   for (const p of players) {
+    if (p.passThrough > 0) continue // their own pass rolls through their feet (PASS_THROUGH_TICKS)
     if (collide(p, ball, PR + BR, INV_PLAYER_MASS, INV_BALL_MASS, E_TOUCH)) touch(state, p)
   }
   for (const p of players) keepPlayerIn(p)
@@ -699,8 +790,7 @@ function intercept(p, bot, ball, [cx, cy], dir) {
   const run = PLAYER_SPEED * bot.speed
   for (let i = 1; i <= 6; i++) {
     const x = ball.x + (cx - ball.x) * i / 6, y = ball.y + (cy - ball.y) * i / 6
-    const left = 1 - BALL_FRICTION * dist(ball.x, ball.y, x, y) / speed
-    const ballTime = left > 0 ? -Math.log(left) / BALL_FRICTION : Infinity
+    const ballTime = rollTime(dist(ball.x, ball.y, x, y), speed)
     const myTime = Math.max(0, dist(p.x, p.y, x, y) - PR - BR) / run + bot.think / TICK_RATE / 2
     if (myTime <= ballTime) return [x, y]
   }
@@ -1021,6 +1111,8 @@ export function decodeSnapshot(state, snap) {
     p.facing = facingAngle(((facing % FACINGS) + FACINGS) % FACINGS)
     p.cooldown = 0
     p.kickWindow = 0
+    p.passWindow = 0
+    p.passThrough = 0
     p.mem = null
   }
   if (phase === 'ended' && events.some(e => e.type === 'phase')) events.push({ type: 'end', winner: winnerOf(state), tick })

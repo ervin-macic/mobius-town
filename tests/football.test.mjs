@@ -134,8 +134,8 @@ test('stepping: the same match however the caller slices time', () => {
   const script = [] // the humans hold a new stick position every half second
   for (let i = 0; i < 40; i++) {
     script.push({
-      h1: { mx: random() * 2 - 1, my: random() * 2 - 1, kick: random() < 0.4 },
-      h2: { mx: random() * 2 - 1, my: random() * 2 - 1, kick: random() < 0.4 },
+      h1: { mx: random() * 2 - 1, my: random() * 2 - 1, kick: random() < 0.4, pass: random() < 0.3 },
+      h2: { mx: random() * 2 - 1, my: random() * 2 - 1, kick: random() < 0.4, pass: random() < 0.3 },
     })
   }
   const SEGMENT = 30000 // half a second in 1/60000 s
@@ -165,6 +165,7 @@ test('stepping: the same match however the caller slices time', () => {
     results[name] = { snapshots, events, state: JSON.stringify(state) }
   }
   assert.ok(results.ticks.events.some(e => e.type === 'kick'), 'the script should produce some play')
+  assert.ok(results.ticks.events.some(e => e.pass), 'and some passes')
   for (const name of ['tenths', 'quarters', 'ragged']) {
     assert.deepEqual(results[name].snapshots, results.ticks.snapshots, name)
     assert.deepEqual(results[name].events, results.ticks.events, name)
@@ -388,6 +389,152 @@ test('dribbling: running into the ball pushes it ahead, the touch counts as poss
   assert.ok(state.ball.x > 150, `ball at ${state.ball.x}`)
   assert.ok(state.ball.x - p.x < 30, 'the ball stays near the dribbler')
   assert.equal(state.lastTouch, p.index)
+})
+
+// ------------------------------------------------------------------ passes
+
+/** 2v2 with r1 at (120, 96) and the ball at their feet on their right; r2 (the teammate) where the caller says. */
+function passerOnBall(mate) {
+  const state = openPlay(TWO_V_TWO)
+  Object.assign(player(state, 'r1'), { x: 120, y: 96 })
+  Object.assign(player(state, 'r2'), mate)
+  setBall(state, 120 + PR + BR + 2, 96)
+  return state
+}
+
+/** Step with `inputs` until the player touches the ball: the ball's speed just before, or null if they never do. */
+function stepUntilTouch(state, id, inputs = {}, seconds = 2) {
+  const index = player(state, id).index
+  for (let i = Math.round(seconds * 60); i > 0; i--) {
+    const speed = speedOf(state.ball)
+    stepMatch(state, inputs, DT)
+    if (state.lastTouch === index) return speed
+  }
+  return null
+}
+
+const heading = body => Math.atan2(body.vy, body.vx)
+
+test('pass: rolls the ball straight to a standing teammate, who gets it at about running pace', () => {
+  for (const mate of [{ x: 200, y: 40 }, { x: 260, y: 150 }, { x: 150, y: 170 }]) {
+    const state = passerOnBall(mate)
+    const events = stepMatch(state, { r1: { pass: true } }, DT)
+    assert.deepEqual(events, [{ type: 'kick', id: 'r1', pass: true, tick: state.tick }]) // the kick sound plays
+    assert.ok(Math.abs(heading(state.ball) - Math.atan2(mate.y - state.ball.y, mate.x - state.ball.x)) < 1e-9, `aimed at ${mate.x}, ${mate.y}`)
+    const arrival = stepUntilTouch(state, 'r2')
+    assert.ok(arrival !== null, `reached the teammate at ${mate.x}, ${mate.y}`)
+    assert.ok(Math.abs(arrival - TUNING.playerSpeed) < 0.15 * TUNING.playerSpeed, `arrived at ${arrival} px/s`)
+  }
+})
+
+test('pass: never struck harder than a kick, so a pass across the whole pitch stops short', () => {
+  const state = passerOnBall({ x: W - 12, y: H - 12 })
+  stepMatch(state, { r1: { pass: true } }, DT)
+  assert.ok(Math.abs(speedOf(state.ball) - TUNING.kickPower * Math.exp(-TUNING.ballFriction * DT)) < 1e-9)
+  assert.equal(stepUntilTouch(state, 'r2', {}, 5), null)
+  assert.equal(speedOf(state.ball), 0)
+})
+
+test('pass: leads a teammate on the move so the ball meets them on their run', () => {
+  const runners = [
+    { at: { x: 150, y: 50 }, dir: [1, 0], pace: 0.55 }, // jogging: aimed where they are, the pass misses by 12 px
+    { at: { x: 165, y: 90 }, dir: [0, -1], pace: 1 }, // sprinting across close by: timed to first contact, it grazes their back
+  ]
+  for (const { at, dir: [dx, dy], pace } of runners) {
+    const run = { r2: { mx: dx * pace, my: dy * pace } }
+    const state = passerOnBall({ ...at, vx: dx * pace * TUNING.playerSpeed, vy: dy * pace * TUNING.playerSpeed })
+    stepMatch(state, { r1: { pass: true }, ...run }, DT)
+    const mate = player(state, 'r2'), ball = state.ball
+    const along = (x, y) => (x * dx + y * dy) / Math.hypot(x, y) // how far a direction points their way
+    assert.ok(along(ball.vx, ball.vy) > along(mate.x - ball.x, mate.y - ball.y) + 0.05, `aimed ahead of the runner from ${at.x}, ${at.y}`)
+    assert.ok(stepUntilTouch(state, 'r2', run, 1) !== null, `met the runner from ${at.x}, ${at.y}`)
+  }
+})
+
+test('pass: a press in a call too short for a tick still counts at the next tick, as a kick does', () => {
+  for (const button of ['kick', 'pass']) {
+    const state = passerOnBall({ x: 220, y: 170 })
+    const tick = state.tick
+    assert.deepEqual(stepMatch(state, { r1: { [button]: true } }, DT / 3), [])
+    assert.equal(state.tick, tick, 'no tick yet')
+    const events = stepMatch(state, { r1: {} }, DT) // the button is already up when the tick comes
+    assert.deepEqual(events.map(e => [e.type, !!e.pass]), [['kick', button === 'pass']], button)
+  }
+})
+
+test('pass: to a teammate behind the passer, the ball rolls through the passer instead of bouncing off', () => {
+  const state = passerOnBall({ x: 40, y: 96 }) // r1 stands between the ball and r2
+  stepMatch(state, { r1: { pass: true } }, DT)
+  const r1 = player(state, 'r1'), r2 = player(state, 'r2')
+  for (let ticks = 0; state.lastTouch !== r2.index; ticks++) {
+    assert.ok(ticks < 120, 'the pass reached r2')
+    assert.ok(state.ball.vx < 0, 'still rolling towards r2')
+    assert.equal(state.lastTouch, r1.index)
+    stepMatch(state, {}, DT)
+  }
+  assert.ok(state.ball.x < r1.x - PR, 'it went through r1')
+})
+
+test('pass: only with the ball in reach, with the press memory and cooldown of a kick; it wins over a kick pressed with it', () => {
+  const state = passerOnBall({ x: 220, y: 170 })
+  const passer = player(state, 'r1')
+  const place = (dx, vx = 0) => {
+    Object.assign(passer, { x: 120, y: 96, vx: 0, vy: 0 })
+    setBall(state, 120 + dx, 96, vx, 0)
+  }
+  const hold = { r1: { pass: true } }
+
+  place(KICK_DIST + 0.1) // just out of reach
+  assert.deepEqual(run(state, 0.3, hold), [])
+  assert.equal(speedOf(state.ball), 0)
+
+  // Holding pass with the ball always in reach: one pass per cooldown.
+  const passes = []
+  for (let i = 1; i <= 30; i++) {
+    place(KICK_DIST - 0.5)
+    if (stepMatch(state, hold, DT).length) passes.push(i)
+  }
+  assert.deepEqual(passes, [1, 16])
+
+  // A tap just before the ball arrives still passes; one too early does not.
+  run(state, 0.5)
+  place(KICK_DIST + 6, -90)
+  let tap = stepMatch(state, hold, DT).concat(run(state, 0.2))
+  assert.deepEqual(tap.map(e => [e.type, e.pass]), [['kick', true]])
+  run(state, 0.5)
+  place(KICK_DIST + 30, -90)
+  tap = stepMatch(state, hold, DT).concat(run(state, 0.6))
+  assert.ok(!types(tap).includes('kick'))
+
+  run(state, 0.5)
+  place(KICK_DIST - 0.5)
+  assert.deepEqual(stepMatch(state, { r1: { kick: true, pass: true } }, DT), [{ type: 'kick', id: 'r1', pass: true, tick: state.tick }])
+})
+
+test('pass: with no teammate (1v1) it is a soft kick where the player faces', () => {
+  const state = openPlay(ONE_V_ONE)
+  const p = player(state, 'r')
+  Object.assign(p, { x: 120, y: 96, facing: -Math.PI / 2 }) // last ran up the pitch
+  setBall(state, 120 + PR + BR + 2, 96) // at their feet, on their right: a kick would send it right
+  assert.deepEqual(stepMatch(state, { r: { pass: true } }, DT), [{ type: 'kick', id: 'r', pass: true, tick: state.tick }])
+  assert.ok(Math.abs(heading(state.ball) + Math.PI / 2) < 1e-9, 'up, where they face')
+  const speed = speedOf(state.ball)
+  assert.ok(speed > 0.3 * TUNING.kickPower && speed < 0.7 * TUNING.kickPower, `${speed} px/s: softer than a kick`)
+  assert.ok(Math.abs(p.facing + Math.PI / 2) < 1e-9)
+})
+
+test('pass: an input without a pass key plays exactly as one with pass: false', () => {
+  const random = seeded(8)
+  const script = []
+  for (let i = 0; i < 30; i++) script.push({ mx: random() * 2 - 1, my: random() * 2 - 1, kick: random() < 0.5 })
+  const play = input => {
+    const state = createMatch({ players: [{ id: 'h', team: 'red' }, { id: 'm', team: 'red', bot: 'hard' }, { id: 'b', team: 'blue', bot: 'medium' }], seed: 6, duration: 30 })
+    const events = []
+    for (const step of script) events.push(...run(state, 0.5, { h: input(step) }))
+    assert.ok(events.some(e => e.type === 'kick'))
+    return JSON.stringify([state, events])
+  }
+  assert.equal(play(step => ({ ...step, pass: false })), play(step => step))
 })
 
 // ------------------------------------------------------------------ match flow
@@ -656,4 +803,62 @@ test('interpolation: positions blend between two snapshots, never across a kick-
   const viewer = createMatch({ players: ONE_V_ONE })
   interpolateSnapshot(viewer, lastGoal, kickoff, 0.5)
   assert.deepEqual([viewer.ball.x, viewer.ball.y], [lastGoal[9][0], lastGoal[9][1]])
+})
+
+test('snapshots: a pass in flight keeps the snapshot layout, round trip and interpolation', () => {
+  const layout = snap => snap.map(v => (Array.isArray(v) ? v.map(w => (Array.isArray(w) ? w.length : typeof w)) : typeof v))
+  const host = passerOnBall({ x: 230, y: 50 })
+  const still = encodeSnapshot(host)
+  stepMatch(host, { r1: { pass: true } }, DT)
+  const a = encodeSnapshot(host)
+  run(host, 4 * DT)
+  const b = encodeSnapshot(host)
+  assert.deepEqual(layout(a), layout(still))
+  assert.equal(snapshotTick(a), host.tick - 4)
+
+  const client = createMatch({ players: TWO_V_TWO })
+  decodeSnapshot(client, JSON.parse(JSON.stringify(a)))
+  assert.deepEqual(encodeSnapshot(client), a)
+  interpolateSnapshot(client, a, b, 0.5)
+  assert.ok(Math.abs(client.ball.x - (a[9][0] + b[9][0]) / 2) < 1e-9)
+  assert.ok(Math.abs(client.ball.y - (a[9][1] + b[9][1]) / 2) < 1e-9)
+
+  // A new host taking over mid-pass carries it on to the teammate.
+  const heir = createMatch({ players: TWO_V_TWO })
+  decodeSnapshot(heir, b)
+  assert.ok(stepUntilTouch(heir, 'r2') !== null)
+})
+
+test('other players hear every kick and pass the host counts, and still guess for an older host', async () => {
+  const { MatchController } = await import('../engine/match.js')
+  const heard = []
+  const town = {
+    pid: 'b1-person', mesh: { broadcast() {}, send() {} }, set() {}, act() {},
+    onMatchEvent: (ev, host) => heard.push(`${ev.type}${host ? ':host' : ''}`),
+    profile: {}, peerInfo: new Map(),
+  }
+  const mc = new MatchController({ town })
+  const state = createMatch({ players: TWO_V_TWO })
+  mc.match = { id: 'm', host: 'r1-person', state, slots: {}, names: {}, from: null, to: null, toAt: 0, ended: null }
+  const snap = () => {
+    stepMatch(state, {}, DT)
+    return encodeSnapshot(state)
+  }
+  mc.onMessage('r1-person', { t: 'fbs', m: 'm', s: snap(), kc: 3 })
+  assert.deepEqual(heard, [], 'the first count only sets the baseline')
+  mc.onMessage('r1-person', { t: 'fbs', m: 'm', s: snap(), kc: 4 })
+  mc.onMessage('r1-person', { t: 'fbs', m: 'm', s: snap(), kc: 4 })
+  assert.deepEqual(heard, ['kick'], 'one kick or pass, one sound')
+  mc.onMessage('r1-person', { t: 'fbs', m: 'm', s: snap(), kc: 1 })
+  mc.onMessage('r1-person', { t: 'fbs', m: 'm', s: snap(), kc: 2 })
+  assert.deepEqual(heard, ['kick', 'kick'], 'a new host counting from lower still sounds after its first snapshot')
+  // An older host sends no count: a ball that suddenly speeds up stands in for a kick.
+  const older = createMatch({ players: TWO_V_TWO })
+  mc.match = { id: 'n', host: 'r1-person', state: older, slots: {}, names: {}, from: null, to: null, toAt: 0, ended: null }
+  stepMatch(older, {}, DT)
+  mc.onMessage('r1-person', { t: 'fbs', m: 'n', s: encodeSnapshot(older) })
+  older.ball.vx = 200
+  stepMatch(older, {}, DT)
+  mc.onMessage('r1-person', { t: 'fbs', m: 'n', s: encodeSnapshot(older) })
+  assert.deepEqual(heard, ['kick', 'kick', 'kick'])
 })

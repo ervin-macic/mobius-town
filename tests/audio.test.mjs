@@ -67,6 +67,7 @@ function makeContextClass({ decodeFails = [] } = {}) {
     close() { this.state = 'closed'; return Promise.resolve() }
     createGain() { const n = new FakeNode('gain'); n.gain = new FakeParam(1); return n }
     createStereoPanner() { const n = new FakeNode('panner'); n.pan = new FakeParam(0); return n }
+    createBiquadFilter() { const n = new FakeNode('filter'); n.type = 'lowpass'; n.frequency = new FakeParam(350); n.Q = new FakeParam(1); return n }
     createBufferSource() { const s = new FakeSource(); this.sources.push(s); return s }
     createBuffer(channels, length, rate) { return { file: null, duration: length / rate } }
 
@@ -292,6 +293,35 @@ test('one-shots: centred or positional, silent when out of reach, with a stop ha
   assert.equal(audio.play('door', { map: 'cafe', x: 10, y: 10 }), null, 'another map')
   assert.equal(audio.play('door', { map: 'town', x: 40, y: 10 }), null, 'too far')
   assert.equal(sourcesOf(ctx(), 'door.mp3').length, 0)
+})
+
+test('muffle: at a game the town goes soft and dull, the game itself stays clear', async () => {
+  const { audio, ctx } = setup()
+  await audio.unlock()
+  await flush(40)
+  audio.setListener({ map: 'town', x: 10, y: 10 })
+  audio.setEmitters([{ id: 'hearth', map: 'town', x: 12, y: 10, sound: 'fire' }])
+  await flush()
+  audio.play('chime') // a game's sound: centred
+  audio.play('door', { map: 'town', x: 11, y: 10 }) // a sound out in the town
+  const [fire] = sourcesOf(ctx(), 'fire.mp3')
+  const [chime] = sourcesOf(ctx(), 'chime.mp3')
+  const [door] = sourcesOf(ctx(), 'door.mp3')
+  const muffle = busOf(fire).outputs[0]
+  assert.equal(muffle.kind, 'filter', 'the fire runs through the muffle')
+  assert.equal(busOf(door).outputs[0], muffle, 'so do sounds out in the town')
+  assert.notEqual(busOf(chime).outputs[0], muffle, "the game's own sounds do not")
+  const level = muffle.outputs[0].gain
+  assert.equal(muffle.frequency.value, 20000)
+  audio.muffle(true)
+  assert.equal(last(muffle.frequency)[1], 600)
+  assert.equal(last(level)[1], 0.45)
+  const events = muffle.frequency.events.length
+  audio.muffle(true)
+  assert.equal(muffle.frequency.events.length, events, 'repeats do nothing')
+  audio.muffle(false)
+  assert.equal(last(muffle.frequency)[1], 20000)
+  assert.equal(last(level)[1], 1)
 })
 
 test('a one-shot whose file arrives too late is skipped; the next one plays at once', async () => {

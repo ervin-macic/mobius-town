@@ -681,8 +681,14 @@ export const CSS = `
 .mt-fb-touch { position: absolute; z-index: 5; inset: auto 0 calc(max(14px, var(--mobius-safe-bottom, 0px)) + 84px) 0; display: flex; justify-content: space-between; align-items: flex-end; padding: 0 22px; pointer-events: none; }
 .mt-fb-stick { pointer-events: auto; width: 120px; height: 120px; border-radius: 50%; background: rgba(18, 15, 26, 0.45); border: 2px solid rgba(255, 255, 255, 0.25); display: grid; place-items: center; touch-action: none; }
 .mt-fb-stick span { width: 48px; height: 48px; border-radius: 50%; background: rgba(255, 246, 220, 0.8); box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4); }
-.mt-fb-kick { pointer-events: auto; width: 92px; height: 92px; border-radius: 50%; border: 2px solid rgba(255, 255, 255, 0.35); background: rgba(226, 62, 62, 0.85); color: #fff; font-size: 18px; touch-action: none; }
+.mt-fb-buttons { display: flex; align-items: flex-end; gap: 10px; }
+.mt-fb-kick, .mt-fb-pass { pointer-events: auto; width: 92px; height: 92px; border-radius: 50%; border: 2px solid rgba(255, 255, 255, 0.35); background: rgba(226, 62, 62, 0.85); color: #fff; font-size: 18px; touch-action: none; }
 .mt-fb-kick:active { transform: scale(0.94); background: rgba(255, 90, 90, 0.95); }
+/* Pass sits a little up and to the left of Kick, smaller, so a thumb finds each by feel; gold
+   stands out on the green pitch without looking like either team's colour. */
+.mt-fb-pass { width: 76px; height: 76px; margin-bottom: 36px; background: rgba(240, 184, 64, 0.9); color: var(--mt-bg); font-size: 16px; }
+.mt-fb-pass:active { transform: scale(0.94); background: rgba(255, 211, 106, 0.97); }
+@media (max-width: 345px) { .mt-fb-touch { padding: 0 10px; } } /* stick, pass and kick still fit side by side */
 @media (max-width: 640px) {
   .mt-fb-board { top: calc(max(10px, var(--mobius-safe-top, 0px)) + 100px); }
 }

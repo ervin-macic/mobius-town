@@ -19,6 +19,7 @@ import { MatchController, SLOTS } from './engine/match.js'
 // the town polls gently and pushes urgency instead: after a change that matters
 // to someone, a peer nudge (over the direct connection) makes them sync at once.
 const SYNC_MS = { active: 1100, normal: 1600, idle: 3000, hidden: 5000 }
+const GAME_OVERLAYS = new Set(['chess', 'connect4'])
 const MIN_SYNC_GAP_MS = 300
 const BUSY_BACKOFF_MS = 6000
 const HEARTBEAT_MS = 1500
@@ -161,6 +162,9 @@ export class Town {
 
   set(patch) {
     this.state = { ...this.state, ...patch }
+    // Sitting at a game (a table game or a party), the town round about goes quiet and dull.
+    const s = this.state
+    this.sound?.muffle(GAME_OVERLAYS.has(s.overlay?.kind) || (!!s.world.party && !s.partyHidden))
     for (const fn of this.listeners) fn()
   }
 
@@ -202,7 +206,10 @@ export class Town {
     })
     // Cats (and anything else on the shared clock) follow the server's time, not this device's.
     this.game.serverNow = () => this.serverNow()
-    this.game.onFrame = (dt) => this.footballFrame(dt)
+    this.game.onFrame = (dt) => {
+      this.footballFrame(dt)
+      this.walkFrame()
+    }
     this.game.onZoom = (zoom) => this.set({ zoom })
     this.game.callsAvailable = this.call.available()
     if (profile.zoom) {
@@ -620,7 +627,12 @@ export class Town {
         Object.assign(info, { map: msg.m, x: msg.x, y: msg.y, dir: msg.d, seq: msg.s, p2pAt: performance.now() })
       }
       if (getMap(msg.m) && Number.isInteger(msg.x) && Number.isInteger(msg.y)) {
-        this.game.upsertOther(from, { mapId: msg.m, x: msg.x, y: msg.y, dir: msg.d })
+        // Newer towns add the exact position; it must lie on (or next to) the tile they name.
+        const exact = Number.isFinite(msg.fx) && Number.isFinite(msg.fy)
+          && Math.abs(msg.fx - msg.x) <= 1 && Math.abs(msg.fy - msg.y) <= 1
+        this.game.upsertOther(from, {
+          mapId: msg.m, x: msg.x, y: msg.y, dir: msg.d, moving: !!msg.mv, ...(exact ? { fx: msg.fx, fy: msg.fy } : {}),
+        })
       }
     } else if (msg.t === 'c') {
       this.receiveChat(from, String(msg.text || '').slice(0, 280))
@@ -667,19 +679,33 @@ export class Town {
   broadcastPosition(moving = false) {
     if (!this.pid) return
     const me = this.game.me
-    const target = me.to || me
     this.seq++
-    this.mesh.broadcast({ t: 'p', m: this.game.mapId, x: target.x, y: target.y, d: me.dir, mv: moving, s: this.seq })
+    // x, y: the whole tile (what older towns read); fx, fy: where exactly you stand.
+    const exact = (v) => Math.round(v * 100) / 100
+    this.mesh.broadcast({
+      t: 'p', m: this.game.mapId, x: me.x, y: me.y, fx: exact(me.fx), fy: exact(me.fy), d: me.dir, mv: moving, s: this.seq,
+    })
     this.lastBroadcast = performance.now()
+    this.sentMoving = moving
+  }
+
+  /** While you walk, people nearby hear where you are about eleven times a second. */
+  walkFrame() {
+    const me = this.game?.me
+    if (!me || !this.pid) return
+    if (me.moving) {
+      if (performance.now() - (this.lastBroadcast || 0) >= 90) this.broadcastPosition(true)
+    } else if (this.sentMoving) {
+      this.broadcastPosition(false)
+    }
   }
 
   // --- game events -------------------------------------------------------------------------------------
 
   onGameEvent(type, payload) {
-    if (type === 'stepstart') {
-      this.broadcastPosition(true)
-    } else if (type === 'step' || type === 'turn') {
-      this.broadcastPosition(false)
+    if (type === 'step' || type === 'turn') {
+      // While walking, walkFrame keeps people posted; a teleport or a turn on the spot is sent now.
+      if (!this.game.me.moving) this.broadcastPosition(false)
       this.proximityTick()
       const me = this.game.me
       this.sound.setListener({ map: this.game.mapId, x: me.x, y: me.y })
@@ -706,6 +732,10 @@ export class Town {
       this.applyScene()
       this.sound.play('door')
       this.proximityTick()
+    } else if (type === 'lockedout') {
+      this.toast(`${payload.name || 'This room'} was locked just as you came in.`, {
+        actions: [{ label: 'Knock', primary: true, run: () => this.act('knock', { room: payload.room }) }],
+      })
     } else if (type === 'blocked') {
       const map = this.game.map
       const room = map.rooms.find((r) => r.door && r.door[0] === payload.x && r.door[1] === payload.y)
@@ -1005,8 +1035,28 @@ export class Town {
   toggleRoomLock() {
     const ui = this.game.snapshot()
     if (!ui.room?.lockable) return
-    if (this.state.roomLock) this.act('unlock', { room: ui.room.id })
-    else this.act('lock').then((r) => { if (r) this.toast(`${ui.room.name} is locked. Only Möbians inside can come and go.`) })
+    if (this.state.roomLock) {
+      this.act('unlock', { room: ui.room.id }).then((r) => { if (r) this.nudgeMap() })
+      return
+    }
+    // Who is in here right now, as this town sees it (fresher than the hub's view).
+    const map = this.game.map
+    const inside = [this.pid]
+    for (const a of this.game.others.values()) {
+      if (a.mapId === this.game.mapId && roomAt(map, a.x, a.y)?.id === ui.room.id) inside.push(a.id)
+    }
+    this.act('lock', { inside }).then((r) => {
+      if (!r) return
+      this.toast(`${ui.room.name} is locked. Only Möbians inside can come and go.`)
+      this.nudgeMap()
+    })
+  }
+
+  /** Ask everyone on this map to sync now, so a lock or unlock reaches them at once. */
+  nudgeMap() {
+    for (const [pid, info] of this.peerInfo) {
+      if ((this.game.others.get(pid)?.mapId || info.map) === this.game.mapId) this.nudge(pid)
+    }
   }
 
   toggleBubble() {
@@ -1468,28 +1518,67 @@ export class Town {
       this.toast('Paste a YouTube link, like youtube.com/watch?v=…')
       return false
     }
-    let title = ''
-    try {
-      const url = `https://www.youtube.com/oembed?format=json&url=${encodeURIComponent(`https://www.youtube.com/watch?v=${id}`)}`
-      const res = await fetch(`/api/proxy?url=${encodeURIComponent(url)}`, { headers: { Authorization: `Bearer ${this.token}` } })
-      if (res.ok) title = (await res.json())?.title || ''
-    } catch {
-      /* title is optional */
-    }
-    const r = await this.act('tv', { screen: 'tv', video: id, title })
+    const [title, length] = await Promise.all([this.youtubeTitle(id), this.youtubeLength(id)])
+    const r = await this.act('tv', { screen: 'tv', video: id, title, ...(length ? { length } : {}) })
+    if (r) this.nudgeMap()
     return !!r
   }
 
-  clearTv() {
-    return this.act('tv', { screen: 'tv', video: null })
+  /** Start what is on the screen again from the beginning, for everyone. */
+  async restartTv() {
+    const tv = this.state.world.tv?.tv
+    if (!tv) return false
+    const r = await this.act('tv', { screen: 'tv', video: tv.video, title: tv.title || '', ...(tv.length ? { length: tv.length } : {}) })
+    if (r) this.nudgeMap()
+    return !!r
+  }
+
+  async clearTv() {
+    const r = await this.act('tv', { screen: 'tv', video: null })
+    if (r) this.nudgeMap()
+    return r
+  }
+
+  /** Seconds into the video everyone is at, on the town's shared clock; null once it has finished. */
+  tvPosition(tv = this.state.world.tv?.tv) {
+    if (!tv) return null
+    const at = Math.max(0, Math.floor((this.serverNow() - tv.at) / 1000))
+    return tv.length && at >= tv.length ? null : at
   }
 
   openTv() {
     const tv = this.state.world.tv?.tv
     if (!tv) return
-    const offset = Math.max(0, Math.floor((Date.now() - tv.at) / 1000))
+    // Finished: start from the beginning rather than past the end.
+    const offset = this.tvPosition(tv) ?? 0
     const url = `https://www.youtube.com/watch?v=${tv.video}${offset > 5 ? `&t=${offset}s` : ''}`
     window.open(url, '_blank', 'noopener,noreferrer')
+  }
+
+  async youtubeFetch(url) {
+    const res = await fetch(`/api/proxy?url=${encodeURIComponent(url)}`, { headers: { Authorization: `Bearer ${this.token}` } })
+    if (!res.ok) throw new Error(`youtube ${res.status}`)
+    return res
+  }
+
+  async youtubeTitle(id) {
+    try {
+      const url = `https://www.youtube.com/oembed?format=json&url=${encodeURIComponent(`https://www.youtube.com/watch?v=${id}`)}`
+      return (await (await this.youtubeFetch(url)).json())?.title || ''
+    } catch {
+      return '' // the title is optional
+    }
+  }
+
+  /** The video's length in seconds from its YouTube page, or null (then it simply never "finishes"). */
+  async youtubeLength(id) {
+    try {
+      const html = await (await this.youtubeFetch(`https://www.youtube.com/watch?v=${id}`)).text()
+      const seconds = Number(/"lengthSeconds":"(\d+)"/.exec(html)?.[1])
+      return Number.isInteger(seconds) && seconds > 0 && seconds <= 86_400 ? seconds : null
+    } catch {
+      return null
+    }
   }
 
   async loadTvThumb(video) {
@@ -1542,7 +1631,7 @@ const PLACE_NAMES = {
 const EVENT_PLACE_TO_PLACE = { stage: 'stage', plaza: 'plaza', cafe: 'cafe', cinema: 'cinema', garden: 'garden', 'meet-a': 'meet-a', 'meet-b': 'meet-b' }
 
 const SIGN_TEXT = {
-  'pitch-sign': 'Walk onto the pitch to join a match: two against two, three minutes, and bots fill any empty place. Arrow keys or WASD to run, Space or X to kick.',
+  'pitch-sign': 'Walk onto the pitch to join a match: two against two, three minutes, and bots fill any empty place. Arrow keys or WASD to run, Space or X to kick, Q or Z to pass to your teammate.',
   welcome: 'Welcome, Möbian! Walk up to others to talk — what you say reaches whoever is close. Houses hold games: the Chess Club and the Game Den start a match when two Möbians walk in. Meet privately in the Town Hall, take the stage in its auditorium, or put something on at the Cinema.',
   'sign-chess': 'Two Möbians inside means a game of chess. Spectators welcome.',
   'sign-den': 'Connect Four for two. Walk in with a friend.',

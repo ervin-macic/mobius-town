@@ -790,8 +790,14 @@ def act_lock(db, world, me, by_pid, body, now):
   key = f"{me['map']}:{me['room']}"
   require(key in META['lockable'], 'Only meeting rooms can be locked.')
   require(key not in world['locks'], 'This room is already locked.')
-  inside = sorted(p['pid'] for p in by_pid.values() if p['map'] == me['map'] and p['room'] == me['room'])
-  world['locks'][key] = {'by': me['pid'], 'byName': me['name'], 'at': ms(now), 'allow': inside}
+  inside = {p['pid'] for p in by_pid.values() if p['map'] == me['map'] and p['room'] == me['room']}
+  # Positions reach the locker peer to peer before the hub hears of them, so the people it saw
+  # inside (on this map, and online) count as inside too: someone who has just walked in is not
+  # then put out of the room they were locked into.
+  seen = body.get('inside')
+  if isinstance(seen, list):
+    inside |= {pid for pid in seen[:50] if isinstance(pid, str) and by_pid.get(pid, {}).get('map') == me['map']}
+  world['locks'][key] = {'by': me['pid'], 'byName': me['name'], 'at': ms(now), 'allow': sorted(inside)}
   return {'locked': key}
 
 
@@ -888,6 +894,10 @@ def act_tv(db, world, me, by_pid, body, now):
     'video': video, 'title': clean_text(body.get('title'), 120), 'by': me['pid'], 'byName': me['name'],
     'at': ms(now),
   }
+  # Its length in seconds, when the town could find it: it knows when the video has finished.
+  length = body.get('length')
+  if isinstance(length, int) and not isinstance(length, bool) and 0 < length <= 86_400:
+    world['tv'][screen]['length'] = length
   return {'tv': world['tv'][screen]}
 
 

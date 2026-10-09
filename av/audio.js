@@ -11,8 +11,12 @@
 // delay shifts both points together, so loops stay seamless everywhere.
 //
 // Graph:  scene track -> sceneBus -+
-//         dance songs -> danceBus -+-> duck -> musicBus -+-> master -> speakers
-//         effects and loops -> sfxBus ------------------+
+//         dance songs -> danceBus -+-> duck -> musicBus ---------+
+//         loops and positional effects -> townSfxBus ---------+-> muffle -> master -> speakers
+//         other effects (the game you play) -> sfxBus --------------------->
+//
+// muffle(true) while you sit at a game: the town round about (music, the fire, sounds nearby)
+// turns soft and dull, as if through a wall, and the game's own sounds stay clear.
 //
 // Nothing runs per frame: gains change only when the listener, emitters,
 // dancers, volumes or switches change, and identical updates are ignored.
@@ -27,6 +31,9 @@ export const SCENE_FADE = 1.5 // seconds, crossfade between scene tracks
 export const DEFAULT_VOLUMES = Object.freeze({ music: 0.35, sfx: 0.7 })
 
 const DUCK_DEPTH = 0.7 // duck(1) leaves music at 30 %
+const MUFFLE_HZ = 600 // low-pass cut-off while muffled
+const MUFFLE_LEVEL = 0.45 // and the town's level
+const OPEN_HZ = 20000
 const DANCE_OVER_SCENE = 0.85 // scene music dips by this share of the loudest dance song
 const MAX_DANCES = 2 // only the two loudest dance songs play at once
 const SMOOTH = 0.12 // seconds for position and volume changes
@@ -135,6 +142,7 @@ export class TownAudio {
     this._enabled = { music: true, sfx: true }
     this._volumes = { ...DEFAULT_VOLUMES }
     this._duckAmount = 0
+    this._muffled = false
     this._scene = 'silent'
     this._sceneTrack = null // { name, voice }
     this._sceneDip = 1
@@ -221,6 +229,16 @@ export class TownAudio {
     })
   }
 
+  /** Muffle the town (music, loops, positional sounds) while you play a game; game sounds stay clear. */
+  muffle(on) {
+    this._safe('muffle', () => {
+      const next = !!on
+      if (next === this._muffled) return
+      this._muffled = next
+      if (this._live()) this._applyMuffle()
+    })
+  }
+
   /** The local player's position: { map, x, y } in tiles. */
   setListener(listener) {
     this._safe('setListener', () => {
@@ -302,16 +320,18 @@ export class TownAudio {
           this._safe('stop', () => this._stopVoice(handle.voice, Math.max(0.01, Number(fade) || 0.01)))
         },
       }
+      // A sound out in the town (it has a position) is muffled with the town; a game's is not.
+      const bus = pan === null ? this._sfxBus : this._townSfxBus
       const cached = this._buffers.get(file)?.buffer
       if (cached) {
-        handle.voice = this._startVoice(cached, this._sfxBus, { level, pan })
+        handle.voice = this._startVoice(cached, bus, { level, pan })
         return handle
       }
       const asked = this._ctx.currentTime
       this._load(file).then((buffer) => {
         if (!buffer || handle.stopped || !this._live() || !this._enabled.sfx) return
         if (this._ctx.currentTime - asked > LATE) return
-        handle.voice = this._startVoice(buffer, this._sfxBus, { level, pan })
+        handle.voice = this._startVoice(buffer, bus, { level, pan })
       })
       return handle
     }, null)
@@ -409,10 +429,17 @@ export class TownAudio {
       return g
     }
     this._master = gain(ctx.destination, 1)
-    this._musicBus = gain(this._master, this._enabled.music ? this._volumes.music : 0)
+    this._muffleGain = gain(this._master, this._muffled ? MUFFLE_LEVEL : 1)
+    this._muffleFilter = ctx.createBiquadFilter()
+    this._muffleFilter.type = 'lowpass'
+    this._muffleFilter.frequency.value = this._muffled ? MUFFLE_HZ : OPEN_HZ
+    this._muffleFilter.frequency._townTarget = this._muffleFilter.frequency.value
+    this._muffleFilter.connect(this._muffleGain)
+    this._musicBus = gain(this._muffleFilter, this._enabled.music ? this._volumes.music : 0)
     this._duckNode = gain(this._musicBus, 1 - DUCK_DEPTH * this._duckAmount)
     this._sceneBus = gain(this._duckNode, 1)
     this._danceBus = gain(this._duckNode, 1)
+    this._townSfxBus = gain(this._muffleFilter, this._enabled.sfx ? this._volumes.sfx : 0)
     this._sfxBus = gain(this._master, this._enabled.sfx ? this._volumes.sfx : 0)
   }
 
@@ -432,6 +459,7 @@ export class TownAudio {
   _applyAll() {
     if (!this._live()) return
     this._applyBusGains()
+    this._applyMuffle()
     this._syncScene()
     this._syncEmitters()
     this._syncDances()
@@ -440,6 +468,12 @@ export class TownAudio {
   _applyBusGains() {
     this._ramp(this._musicBus.gain, this._enabled.music ? this._volumes.music : 0, 0.4)
     this._ramp(this._sfxBus.gain, this._enabled.sfx ? this._volumes.sfx : 0, 0.25)
+    this._ramp(this._townSfxBus.gain, this._enabled.sfx ? this._volumes.sfx : 0, 0.25)
+  }
+
+  _applyMuffle() {
+    this._ramp(this._muffleGain.gain, this._muffled ? MUFFLE_LEVEL : 1, 0.35)
+    this._ramp(this._muffleFilter.frequency, this._muffled ? MUFFLE_HZ : OPEN_HZ, 0.35)
   }
 
   // Smoothly move an AudioParam to `value` over about `time` seconds (no-op if already there).
@@ -625,7 +659,7 @@ export class TownAudio {
         if (!this._enabled.sfx || lvl <= SILENT) return
         // Start somewhere inside the loop so neighbouring fires do not crackle in step.
         const offset = meta.loopStart + Math.random() * (meta.loopEnd - meta.loopStart)
-        em.voice = this._startVoice(buffer, this._sfxBus, { level: lvl, pan: now.pan, meta, offset, fadeIn: 0.6 })
+        em.voice = this._startVoice(buffer, this._townSfxBus, { level: lvl, pan: now.pan, meta, offset, fadeIn: 0.6 })
       })
     }
   }

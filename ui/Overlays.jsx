@@ -286,6 +286,12 @@ function TvPanel({ town, state }) {
   const tv = state.world.tv?.tv
   const [link, setLink] = useState('')
   const [busy, setBusy] = useState(false)
+  const [, setTick] = useState(0)
+  useEffect(() => {
+    // Keep the shared position ticking while the panel is open.
+    const timer = setInterval(() => setTick((n) => n + 1), 1000)
+    return () => clearInterval(timer)
+  }, [])
   const submit = async (e) => {
     e.preventDefault()
     setBusy(true)
@@ -293,7 +299,9 @@ function TvPanel({ town, state }) {
     setBusy(false)
     if (ok) setLink('')
   }
-  const elapsed = tv ? Math.max(0, Math.floor((Date.now() - tv.at) / 1000)) : 0
+  const clock = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
+  const at = tv ? town.tvPosition(tv) : null
+  const finished = !!tv && at === null
   return (
     <Sheet title="Cinema screen" onClose={() => town.closeOverlay()}>
       {tv ? (
@@ -302,7 +310,9 @@ function TvPanel({ town, state }) {
           <div>
             <p className="mt-tv-title">{tv.title || 'A YouTube video'}</p>
             <p className="mt-note" style={{ margin: '4px 0 0' }}>
-              Put on by {tv.byName || 'someone'} · playing for {Math.floor(elapsed / 60)}:{String(elapsed % 60).padStart(2, '0')}
+              Put on by {tv.byName || 'someone'} · {finished
+                ? 'finished'
+                : `${clock(at)}${tv.length ? ` of ${clock(tv.length)}` : ''}`}
             </p>
           </div>
         </div>
@@ -312,8 +322,9 @@ function TvPanel({ town, state }) {
       {tv && (
         <div className="mt-actions" style={{ justifyContent: 'flex-start' }}>
           <button type="button" className="mt-btn is-primary" onClick={() => town.openTv()}>
-            <Play aria-hidden="true" /> Watch together <ExternalLink aria-hidden="true" />
+            <Play aria-hidden="true" /> {finished ? 'Watch from the start' : 'Watch together'} <ExternalLink aria-hidden="true" />
           </button>
+          <button type="button" className="mt-btn" onClick={() => town.restartTv()}>Start again for everyone</button>
           <button type="button" className="mt-btn" onClick={() => town.clearTv()}>Turn off</button>
         </div>
       )}
@@ -325,7 +336,9 @@ function TvPanel({ town, state }) {
           <button type="submit" className="mt-btn" disabled={!link.trim() || busy}>{busy ? 'Loading…' : 'Play'}</button>
         </div>
       </form>
-      <p className="mt-note">YouTube opens in its own tab, jumping to the same moment everyone else is watching.</p>
+      <p className="mt-note">
+        YouTube opens in its own tab at the moment everyone else is at. If you drift apart, start it again for everyone.
+      </p>
     </Sheet>
   )
 }

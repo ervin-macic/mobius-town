@@ -1,8 +1,10 @@
 // The imperative game core: local player, remote avatars, camera, input and
 // the frame loop. React reads a small UI snapshot through `subscribe`.
 import { DEFAULT_LOOK, loadAtlas, loadCharacters, loadGround, normalizeLook, T } from './assets.js'
-import { doorAt, findPath, getMap, lockDoors, objectsAt, roomAt, seatAt, spawnNear, tileKind } from './maps.js'
-import { drawScene } from './render.js'
+import { doorAt, findPath, freeTileNear, getMap, lockDoors, objectsAt, roomAt, seatAt, spawnNear, tileKind } from './maps.js'
+import { drawScene, feetPx } from './render.js'
+import { BEAM } from './beam.js'
+import { Effects } from './effects.js'
 import { catsOn } from './cats.js'
 import { heading, MIN_TAP, walk, WALK_SPEED } from './motion.js'
 
@@ -15,7 +17,7 @@ function makeAvatar(id, name, look, mapId, x, y, dir = 'down') {
   return {
     id, name, look: normalizeLook(look), mapId, x, y, fx: x, fy: y, dir,
     moving: false, walkT: 0, emote: null, chat: null, speaking: 0, status: '',
-    path: [], muted: false, seat: null, dance: null,
+    path: [], muted: false, seat: null, dance: null, beamHideUntil: 0,
   }
 }
 
@@ -65,6 +67,9 @@ export class Game {
     this.doorAnim = {}
     this.cutscene = null
     this.effects = []
+    // A teleport in progress (beamTo), and the camera's glide to where it lands on this map.
+    this.beam = null
+    this.camGlide = null
     // Cats walk on the shared clock; the town sets this to its server-synchronised clock.
     this.serverNow = () => Date.now()
     this.cats = []
@@ -75,6 +80,29 @@ export class Game {
     this.footballView = null
     this.hiddenAvatars = null
     this.matchFit = null
+    // Creations: moments (confetti, banners, room lights), build sites on this map, and the spot
+    // the Create panel points at.
+    this.fx = new Effects()
+    this.sites = []
+    this.createMarker = null
+    this.courtView = null
+  }
+
+  /** Creations changed on this map: walk, sit and draw with the new one at once. */
+  refreshMap() {
+    this.map = getMap(this.mapId)
+    this.lockDoorTiles = lockDoors(this.map)
+    const me = this.me
+    // Something was just built where you stand: step onto the nearest free tile.
+    if (tileKind(this.map, me.x, me.y) === 1) {
+      const [x, y] = freeTileNear(this.map, me.x, me.y, 4)
+      if (tileKind(this.map, x, y) !== 1) {
+        Object.assign(me, { x, y, fx: x, fy: y, path: [], seat: null })
+        this.onEvent('step', { mapId: this.mapId, x, y, dir: me.dir })
+      }
+    }
+    if (me.seat && !seatAt(this.map, me.x, me.y)) me.seat = null
+    this.markUi()
   }
 
   // --- lifecycle -------------------------------------------------------------------
@@ -248,7 +276,7 @@ export class Game {
 
   /** A short scripted moment: input freezes, the camera visits `focus`, render.js draws the scene. */
   playCutscene(kind, { focus, duration = 5, caption = '', sub = '', data = {} } = {}) {
-    if (this.cutscene) return false
+    if (this.cutscene || this.beam) return false
     this.cutscene = { kind, start: this.time, duration, focus, caption, sub, data }
     this.held = []
     this.me.path = []
@@ -492,7 +520,8 @@ export class Game {
     }
   }
 
-  async teleport(mapId, x, y, dir = 'down') {
+  /** Put yourself at (x, y) on `mapId`. `how` says why ('door', 'beam'); `glide` eases the camera there. */
+  async teleport(mapId, x, y, dir = 'down', { how = 'door', glide = false } = {}) {
     await this.ensureGround(mapId)
     const changed = mapId !== this.mapId
     this.mapId = mapId
@@ -501,17 +530,134 @@ export class Game {
     Object.assign(this.me, { mapId, x, y, fx: x, fy: y, dir, moving: false, path: [], seat: null })
     this.nudge = {}
     this.sitBlock = null
-    this.snapCamera = true
+    if (glide && !changed && Number.isFinite(this.view.x)) {
+      this.camGlide = { x: this.view.x, y: this.view.y, start: this.time, duration: BEAM.glide }
+    } else {
+      this.camGlide = null
+      this.snapCamera = true
+    }
     this.markUi()
-    if (changed) this.onEvent('map', { mapId, x, y, dir })
-    this.onEvent('step', { mapId, x, y, dir })
+    if (changed) this.onEvent('map', { mapId, x, y, dir, how })
+    this.onEvent('step', { mapId, x, y, dir, how })
+  }
+
+  // --- teleporting ------------------------------------------------------------------------
+
+  /**
+   * Teleport yourself in a beam of light: you dissolve upwards where you stand, the view travels
+   * (a quick glide on this map; a fade to another map or far across this one) and a second beam
+   * sets you down. Input stays frozen until you have materialised, about 1.3 s; with reduced
+   * motion it is a short fade instead. `where()` gives { mapId, x, y, dir } and is asked again at
+   * the jump, so someone who walked on meanwhile is still met. `onLand(spot, { arriveIn })` runs
+   * right after the jump. Resolves true once you can move again, or false at once if a door, a
+   * cutscene or another teleport is under way.
+   */
+  beamTo(where, { reduced = false, onLand = null } = {}) {
+    const first = where()
+    if (!first || !getMap(first.mapId) || this.beam || this.cutscene || this.pendingDoor) return Promise.resolve(false)
+    const me = this.me
+    const far = first.mapId !== this.mapId || Math.hypot(first.x - me.x, first.y - me.y) > BEAM.glideTiles
+    if (me.dance) {
+      me.dance = null
+      this.onEvent('dance', { song: null })
+    }
+    if (me.seat) {
+      me.seat = null
+      this.onEvent('stand', {})
+    }
+    this.route = null
+    this.afterPath = null
+    this.setFrozen(true)
+    const beam = { start: this.time, where, first, reduced, onLand, fade: reduced || far, phase: 'out' }
+    this.beam = beam
+    if (!reduced) {
+      const feet = feetPx(me)
+      this.effects.push({
+        kind: 'beam-out', id: me.id, mapId: this.mapId, x: feet.x, y: feet.y, look: me.look, dir: me.dir,
+        start: this.time, duration: BEAM.outFx,
+      })
+      me.beamHideUntil = Infinity
+    }
+    return new Promise((resolve) => { beam.resolve = resolve })
+  }
+
+  /** Move a teleport along; runs every frame while one is under way. */
+  stepBeam() {
+    const b = this.beam
+    if (!b || b.busy) return
+    if (b.phase === 'out') {
+      const leave = b.reduced ? 0 : BEAM.out
+      const t = this.time - b.start
+      if (b.fade && t >= leave - BEAM.fade) this.fadeTarget = 1
+      if (t >= leave && (!b.fade || this.fade >= 1)) {
+        b.busy = true
+        this.landBeam(b).finally(() => { b.busy = false })
+      }
+    } else if (this.time >= b.doneAt) {
+      this.endBeam()
+    }
+  }
+
+  async landBeam(b) {
+    const spot = b.where() || b.first
+    const glide = !b.fade && spot.mapId === this.mapId
+    await this.teleport(spot.mapId, spot.x, spot.y, spot.dir, { how: 'beam', glide })
+    if (this.beam !== b) return
+    // The beam comes down as the camera settles (gliding) or as the view fades back in.
+    const arrive = this.time + (b.reduced ? 0 : glide ? BEAM.glide * 0.7 : b.fade ? BEAM.fade * 0.5 : 0)
+    if (b.fade) this.fadeTarget = 0
+    if (!b.reduced) {
+      const feet = feetPx(this.me)
+      this.effects.push({
+        kind: 'beam-in', id: this.me.id, mapId: spot.mapId, x: feet.x, y: feet.y, look: this.me.look, dir: this.me.dir,
+        start: arrive, duration: BEAM.inFx,
+      })
+      this.me.beamHideUntil = arrive + BEAM.materialise
+    }
+    b.phase = 'in'
+    b.doneAt = b.reduced ? this.time + BEAM.fade : arrive + BEAM.materialise
+    b.onLand?.(spot, { arriveIn: arrive - this.time })
+  }
+
+  endBeam() {
+    const b = this.beam
+    this.beam = null
+    this.me.beamHideUntil = 0
+    this.setFrozen(false)
+    b?.resolve?.(true)
+  }
+
+  /**
+   * Someone else's teleport, seen from here: 'out', they dissolve where they stood (and stay
+   * hidden until they arrive, or for a moment if they went too far to see); 'in', they beam down
+   * at (x, y) on `mapId`, which is also where they now are.
+   */
+  beamFx(id, kind, mapId, x, y, { reduced = false } = {}) {
+    const a = this.others.get(id)
+    if (!a || !getMap(mapId)) return
+    if (kind === 'in') Object.assign(a, { mapId, x, y, fx: x, fy: y, tx: x, ty: y, moving: false, netMoving: false })
+    if (mapId !== this.mapId) return
+    // Still standing where they left from: dissolve them there. Already elsewhere (the news came
+    // with the hub's sync, after their new position): the light plays on its own.
+    const there = a.mapId === mapId && Math.hypot(a.fx - x, a.fy - y) < 1.5
+    const feet = kind === 'in' || there ? feetPx(a) : { x: Math.round(x * T + T / 2), y: Math.round(y * T + 13) }
+    if (!reduced) {
+      this.effects.push({
+        kind: kind === 'in' ? 'beam-in' : 'beam-out', id, mapId, x: feet.x, y: feet.y, look: a.look, dir: a.dir,
+        start: this.time, duration: kind === 'in' ? BEAM.inFx : BEAM.outFx,
+      })
+    }
+    if (kind === 'in') a.beamHideUntil = reduced ? 0 : this.time + BEAM.materialise
+    else if (there) a.beamHideUntil = this.time + BEAM.remoteHide
   }
 
   usableObjects() {
     const objs = objectsAt(this.map, this.me.x, this.me.y)
-    const out = objs.map((o) => ({ id: o.id, kind: o.kind, text: o.text || null }))
+    const out = objs.map((o) => ({ id: o.id, kind: o.kind, text: o.text || o.prompt || null }))
     // A cat close by wins the prompt: petting is the thing you came over for.
     if (this.nearCat) out.unshift({ id: this.nearCat.id, kind: 'cat', text: this.nearCat.name })
+    // In the Agent Office: the agent you stand next to (set by agentOffice.js).
+    if (this.nearAgent) out.unshift({ id: this.nearAgent.id, kind: 'agent', text: this.nearAgent.name })
     return out
   }
 
@@ -659,7 +805,9 @@ export class Game {
     }
     if (this.cutscene && this.time - this.cutscene.start >= this.cutscene.duration) this.endCutscene()
     this.effects = this.effects.filter((e) => this.time - e.start < e.duration)
-    // Door fade.
+    this.stepBeam()
+    this.fx.update(dt, this.time)
+    // Door (and teleport) fade.
     const fadeSpeed = 5
     if (this.fade < this.fadeTarget) {
       this.fade = Math.min(this.fadeTarget, this.fade + dt * fadeSpeed)

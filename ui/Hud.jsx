@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   Calendar, Chat, ExitLogout, Group, HandWavingBye, Keyboard, Lock, LockKeyHole, Maps, Mic, MicOff, Minus, Music, Plus,
-  SoundOffSpeaker, SoundOnReadOutLoudSpeaker, Users, Video, VideoFilledOff, X,
+  SoundOffSpeaker, SoundOnReadOutLoudSpeaker, Sparkles, Users, Video, VideoFilledOff, X,
 } from '@openai/apps-sdk-ui/components/Icon'
 import AvatarCanvas from './AvatarCanvas.jsx'
 
@@ -17,13 +17,17 @@ const PROMPTS = {
   mobius: 'Admire the Möbius strip',
   spotlight: 'You are on stage',
   pitch: 'Play football',
+  directory: 'See all your agents',
 }
 
 export function promptFor(object, extra) {
   if (!object) return null
   if (extra?.[object.id]) return extra[object.id]
+  if (object.kind === 'cuse') return object.text || 'Interact'
+  if (object.kind === 'court') return `Play ${object.text || 'here'}`
   if (object.kind === 'sign' && object.text) return `Read: ${object.text}`
   if (object.kind === 'cat') return `Pet ${object.text}`
+  if (object.kind === 'agent') return `Talk to ${object.text}`
   return PROMPTS[object.kind] || 'Interact'
 }
 
@@ -153,7 +157,7 @@ export function TopBar({ ui, status, online, roomLock, onLock, onHelp, places, o
 }
 
 export function Dock({
-  me, call, bubble, panel, unread, online, onEditLook, onMic, onCam, onBubble, onEmote, onPanel, songs, dancing,
+  me, call, bubble, panel, unread, online, onEditLook, onMic, onCam, onBubble, onEmote, onPanel, songs, dancing, building,
 }) {
   const [emotes, setEmotes] = useState(false)
   const emoteRef = useRef(null)
@@ -238,6 +242,17 @@ export function Dock({
       <span className="mt-dock-sep" aria-hidden="true" />
       <button
         type="button"
+        className={`mt-iconbtn mt-create-btn${panel === 'create' ? ' is-on' : ''}`}
+        aria-label="Create something here"
+        aria-pressed={panel === 'create'}
+        title="Create something here (C)"
+        onClick={() => onPanel('create')}
+      >
+        <Sparkles aria-hidden="true" />
+        {building > 0 && <span className="mt-badge mt-badge-build" aria-label={`${building} building`}>{building}</span>}
+      </button>
+      <button
+        type="button"
         className={`mt-iconbtn${panel === 'chat' ? ' is-on' : ''}`}
         aria-label="Chat"
         aria-pressed={panel === 'chat'}
@@ -305,6 +320,8 @@ export function HelpCard({ onClose }) {
     ['1 – 4', 'Wave, heart, wow, hmm'],
     ['5', 'Dance (pick a song in the emote menu)'],
     ['P', 'Möbians: walk to someone or challenge them to a party'],
+    ['N', 'Town map: see where everyone is and teleport to them'],
+    ['C', 'Create: ask for something to be built or changed right here'],
     ['+ / − / 0', 'Zoom in or out 20%, or back to 100%'],
     ['Esc', 'Close panels and games'],
   ]

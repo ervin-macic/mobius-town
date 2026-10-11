@@ -190,6 +190,12 @@ def build_sprites():
   reg('floodlight', P.floodlight())
   reg('mobius_pedestal', P.mobius_pedestal())
   reg('townhall', town_hall_sprite())
+  # The Agent Office.
+  reg('office_building', P.office_building(OFFICE_W, OFFICE_H))
+  for i in range(4):
+    reg(f'office_desk{i}', P.office_desk(i))
+  reg('directory', P.directory_board())
+  reg('sign_agents', P.sign(board, 'agents', (92, 62, 150, 255)))
   # Speech/emote icons (objects sheet) for the client.
   for name, box in {
     'bubble_talk': (32, 98, 46, 111), 'bubble_dots': (48, 98, 62, 111),
@@ -272,6 +278,14 @@ class Map:
     self.spawn = (w // 2, h // 2, 'down')
     self.labels = []
     self.seat_count = 0
+    # A private map is one instance per visitor: the client never shows other players inside it.
+    self.private = False
+    # Entity index -> the tiles it owns (its solid tiles, or the seat tiles of a chair or bench),
+    # so a builder hiding a piece of furniture frees exactly those tiles.
+    self.ent_tiles = {}
+    # Pictures painted on walls (windows, paintings, the menu, the cinema screen): [sprite, x, y].
+    # A builder repainting a wall keeps them unless it asks to remove them.
+    self.decor = []
 
   def paint(self, img, x, y):
     self.ground.alpha_composite(img, (int(x), int(y)))
@@ -293,6 +307,15 @@ class Map:
     if z is None:
       z = y + img.height
     self.ents.append([sid, int(x), int(y), int(z)])
+    return len(self.ents) - 1
+
+  def own(self, idx, x, y, w=1, h=1):
+    """Block tiles that belong to entity `idx`."""
+    self.block(x, y, w, h)
+    self.attach(idx, [(xx, yy) for yy in range(y, y + h) for xx in range(x, x + w)])
+
+  def attach(self, idx, tiles):
+    self.ent_tiles.setdefault(idx, set()).update((int(x), int(y)) for (x, y) in tiles)
 
   def add_room(self, rid, name, kind, rects, **extra):
     idx = len(self.rooms)
@@ -318,18 +341,72 @@ class Map:
       back_img = f'chair_{chair}_{face}_back'
       top = ty * T
       if face == 'down':
-        self.ent(back_img, ax - 8, top - 6, top)
-        self.ent(seat_img, ax - 8, top, top + 1)
+        parts = [self.ent(back_img, ax - 8, top - 6, top), self.ent(seat_img, ax - 8, top, top + 1)]
       elif face == 'up':
-        self.ent(seat_img, ax - 8, top, top + 1)
-        self.ent(back_img, ax - 8, top + 9, ay + 4)
+        parts = [self.ent(seat_img, ax - 8, top, top + 1), self.ent(back_img, ax - 8, top + 9, ay + 4)]
       else:
-        self.ent(back_img, ax - 8, top - 2, top)
-        self.ent(seat_img, ax - 8, top + 1, top + 1)
+        parts = [self.ent(back_img, ax - 8, top - 2, top), self.ent(seat_img, ax - 8, top + 1, top + 1)]
+      for idx in parts:
+        self.attach(idx, [(tx, ty)])
     self.objects.append({'id': sid, 'kind': 'seat', 'x': tx, 'y': ty, 'face': face, 'ax': ax, 'ay': ay, **extra})
     return sid
 
+  def protect(self):
+    """Tiles a builder may not block or clear, and the furniture that must stay.
+
+    Doors and the tile you step onto from them, where you arrive, game tables and their seats,
+    the cinema screen, the stage spotlight, the football ground, and everything you can use
+    (fountain, statue, signs, the notice board, fires). Furniture standing on any of those, or
+    that is one of the town's landmarks, is protected too.
+    """
+    keep = set()
+    for d in self.doors:
+      keep.add((d['x'], d['y']))
+      keep.add((d['x'], d['y'] + 1) if self.id == 'town' else (d['x'], d['y'] - 1))
+    sx, sy, _ = self.spawn
+    keep |= {(sx, sy), (sx - 1, sy), (sx + 1, sy), (sx, sy - 1)}
+    for o in self.objects:
+      kind = o['kind']
+      tiles = []
+      if kind in ('chess', 'connect4'):
+        x, y, w, h = o['rect']
+        tiles = [(xx, yy) for yy in range(y, y + h) for xx in range(x, x + w)]
+        tiles += [(s['x'], s['y']) for s in o['seats']]
+      elif kind in ('tv', 'pitch', 'fountain', 'statue', 'mobius', 'notice', 'sign'):
+        tiles = [tuple(t) for t in o.get('use', [])]
+      elif kind == 'spotlight':
+        tiles = [tuple(t) for t in o['tiles']]
+      elif kind == 'fire':
+        tiles = [(o['x'], o['y'])]
+      elif kind == 'door':
+        tiles = [(o['x'] + dx, o['y']) for dx in (-1, 0, 1)]
+      elif kind == 'board':
+        tiles = [(o['px'] // T, o['py'] // T)]
+      keep |= set(tiles)
+    keep = {(x, y) for (x, y) in keep if 0 <= x < self.w and 0 <= y < self.h}
+    landmarks = {'townhall', 'house_slate', 'house_red', 'house_plum', 'house_green', 'fountain', 'statue',
+                 'mobius_pedestal', 'notice', 'sign_chess', 'sign_games', 'sign_film', 'sign_coffee', 'signpost',
+                 'tv', 'chess_table', 'c4_table', 'fireplace', 'podium', 'spot', 'floodlight', 'torch', 'reception',
+                 'office_building', 'sign_agents'}
+    self.protected = keep
+    self.ent_protected = {i for i, e in enumerate(self.ents)
+                          if e[0] in landmarks or self.ent_tiles.get(i, set()) & keep}
+
+  def ent_keys(self):
+    """Stable names for entities, `sprite@x,y`, so a creation can hide one."""
+    keys, seen = [], {}
+    for sid, x, y, _z in self.ents:
+      key = f'{sid}@{x},{y}'
+      seen[key] = seen.get(key, 0) + 1
+      keys.append(key if seen[key] == 1 else f'{key}#{seen[key]}')
+    return keys
+
   def export(self, previews=None):
+    self.protect()
+    # [sprite, x, y, sort line, owned tiles, protected, key]: the town hides furniture by key.
+    keys = self.ent_keys()
+    ents = [[sid, x, y, z, sorted([list(t) for t in self.ent_tiles.get(i, ())]), 1 if i in self.ent_protected else 0,
+             keys[i]] for i, (sid, x, y, z) in enumerate(self.ents)]
     data = {
       'id': self.id, 'name': self.name, 'w': self.w, 'h': self.h, 'outdoor': self.outdoor,
       'theme': self.theme,
@@ -337,12 +414,16 @@ class Map:
       'solid': ''.join(str(v) for v in self.solid),
       'rooms': self.rooms,
       'roomGrid': ''.join(chr(97 + v) for v in self.room),
-      'ents': self.ents,
+      'ents': ents,
+      'protected': ''.join('1' if (i % self.w, i // self.w) in self.protected else '0' for i in range(self.w * self.h)),
       'doors': self.doors,
+      'decor': self.decor,
       'objects': self.objects,
       'spawn': list(self.spawn),
       'labels': self.labels,
     }
+    if self.private:
+      data['private'] = True
     if previews:
       self.preview(previews)
     return data
@@ -457,9 +538,9 @@ def place(m, sid, tx, ty, block=None, dx=0, dy=0, z=None):
   img = SPRITES[sid][0]
   x = tx * T + T // 2 - img.width // 2 + dx
   y = (ty + 1) * T - img.height + dy
-  m.ent(sid, x, y, z)
+  idx = m.ent(sid, x, y, z)
   if block:
-    m.block(*block)
+    m.own(idx, *block)
   return x, y
 
 
@@ -469,6 +550,8 @@ TOWN_W, TOWN_H = 64, 71
 # The football ground south of the Möbius garden: the playing field's top-left tile and size in tiles.
 PITCH_X, PITCH_Y, PITCH_W, PITCH_H = 21, 54, 22, 12
 TH_X, TH_ROW = 11, 12  # Town Hall left tile and its front (bottom) row
+# The Agent Office in the west meadow: its top-left footprint tile and size in tiles.
+OFFICE_X, OFFICE_Y, OFFICE_W, OFFICE_H = 5, 36, 6, 5
 
 HOUSES = [
   # id, sprite, tile x, tile y (top-left of the 5x5 window), sign sprite, name
@@ -478,7 +561,8 @@ HOUSES = [
   ('cafe', 'house_green', 53, 27, 'sign_coffee', 'Café'),
 ]
 
-INTERIOR_SIZE = {'chess': (16, 11), 'den': (16, 11), 'cinema': (18, 12), 'cafe': (16, 11), 'hall': (30, 18)}
+INTERIOR_SIZE = {'chess': (16, 11), 'den': (16, 11), 'cinema': (18, 12), 'cafe': (16, 11), 'hall': (30, 18),
+                 'office': (22, 14)}
 
 
 def interior_entry(mid):
@@ -546,8 +630,7 @@ def build_town(offs):
   # The Town Hall.
   th = SPRITES['townhall'][0]
   th_bottom = (TH_ROW + 1) * T
-  m.ent('townhall', TH_X * T, th_bottom - th.height, th_bottom - 4)
-  m.block(TH_X, 3, TH_TILES_W, TH_ROW - 2)
+  m.own(m.ent('townhall', TH_X * T, th_bottom - th.height, th_bottom - 4), TH_X, 3, TH_TILES_W, TH_ROW - 2)
   m.door(31, TH_ROW, 'hall', *interior_entry('hall'), 'up')
   m.door(32, TH_ROW, 'hall', *interior_entry('hall'), 'up')
   m.labels.append({'x': 32 * T, 'y': 3 * T + 4, 'text': 'Town Hall'})
@@ -561,35 +644,32 @@ def build_town(offs):
   # Houses with signs.
   for hid, sid, hx, hy, sign, name in HOUSES:
     hox, hoy = offs['house']
-    m.ent(sid, hx * T + hox, hy * T + hoy)
-    m.block(hx, hy, 5, 5)
+    m.own(m.ent(sid, hx * T + hox, hy * T + hoy), hx, hy, 5, 5)
     dx, dy = hx + 2, hy + 4
     m.door(dx, dy, hid, *interior_entry(hid), 'up')
     sx = hx + 5 if hx < 32 else hx - 2
     simg = SPRITES[sign][0]
-    m.ent(sign, sx * T + (2 * T - simg.width) // 2, (hy + 5) * T - simg.height)
-    m.block(sx, hy + 4, 2, 1)
+    m.own(m.ent(sign, sx * T + (2 * T - simg.width) // 2, (hy + 5) * T - simg.height), sx, hy + 4, 2, 1)
     m.objects.append({'id': f'sign-{hid}', 'kind': 'sign', 'text': name, 'use': [[sx, hy + 5], [sx + 1, hy + 5]]})
     m.labels.append({'x': (hx * T + 40), 'y': hy * T - 4, 'text': name})
 
   # Plaza: fountain, benches, lamps, market, notice board.
   f = SPRITES['fountain'][0]
-  m.ent('fountain', fountain_c[0] - f.width // 2, fountain_c[1] - f.height // 2)
-  m.block(30, 23, 4, 3)
+  m.own(m.ent('fountain', fountain_c[0] - f.width // 2, fountain_c[1] - f.height // 2), 30, 23, 4, 3)
   m.objects.append({'id': 'fountain', 'kind': 'fountain', 'use': [[31, 26], [32, 26], [29, 24], [34, 24], [31, 22], [32, 22]],
                     'focus': [fountain_c[0], fountain_c[1] - 6]})
   for (bx, by) in ((25, 20), (25, 28), (36, 28)):
     img = SPRITES['bench'][0]
-    m.ent('bench', bx * T + (3 * T - img.width) // 2, (by + 1) * T - img.height + 2, by * T)
+    idx = m.ent('bench', bx * T + (3 * T - img.width) // 2, (by + 1) * T - img.height + 2, by * T)
     for i in range(3):
       m.seat(bx + i, by, 'down')
+    m.attach(idx, [(bx + i, by) for i in range(3)])
   for (lx, ly) in ((23, 16), (40, 16), (23, 30), (40, 30), (14, 18), (18, 18), (45, 18), (49, 18),
                    (14, 34), (18, 34), (45, 34), (49, 34)):
     place(m, 'lamp', lx, ly, block=(lx, ly, 1, 1))
     m.objects.append({'id': f'lamp-{lx}-{ly}', 'kind': 'lamp', 'x': lx, 'y': ly})
   sox, soy = offs['stall']
-  m.ent('stall', 35 * T + sox, 15 * T + soy)
-  m.block(35, 17, 5, 4)
+  m.own(m.ent('stall', 35 * T + sox, 15 * T + soy), 35, 17, 5, 4)
   place(m, 'produce0', 34, 20, block=(34, 20, 1, 1))
   place(m, 'crates', 24, 17, block=(24, 17, 2, 1))
   nb = SPRITES['notice']
@@ -600,12 +680,12 @@ def build_town(offs):
   for (tx, ty, sid) in ((13, 22, 'tree1'), (19, 22, 'tree_autumn'), (14, 26, 'tree4'), (19, 27, 'tree2')):
     tree_at(m, rng, tx, ty, sid)
   img = SPRITES['bench_low'][0]
-  m.ent('bench_low', 15 * T + (3 * T - img.width) // 2, 25 * T - img.height + 2, 24 * T)
+  idx = m.ent('bench_low', 15 * T + (3 * T - img.width) // 2, 25 * T - img.height + 2, 24 * T)
   for i in range(3):
     m.seat(15 + i, 24, 'down')
+  m.attach(idx, [(15 + i, 24) for i in range(3)])
   for (x, y) in ((5, 22), (7, 23), (9, 22), (6, 25)):
-    m.ent('bush', x * T, y * T)
-    m.block(x, y)
+    m.own(m.ent('bush', x * T, y * T), x, y)
 
   # East park: the Founder statue among trees.
   place(m, 'statue', 47, 24, block=(47, 23, 2, 2), dx=8)
@@ -617,8 +697,7 @@ def build_town(offs):
   # The Möbius garden monument.
   ped = SPRITES['mobius_pedestal'][0]
   ped_x, ped_y = 32 * T - ped.width // 2, int(garden_c[1] * T) - ped.height // 2 + 6
-  m.ent('mobius_pedestal', ped_x, ped_y, ped_y + ped.height - 6)
-  m.block(30, 42, 4, 2)
+  m.own(m.ent('mobius_pedestal', ped_x, ped_y, ped_y + ped.height - 6), 30, 42, 4, 2)
   m.objects.append({
     'id': 'mobius', 'kind': 'mobius', 'cx': 32 * T, 'cy': ped_y - 30, 'size': 96, 'z': ped_y + ped.height - 5,
     'use': [[30, 45], [31, 45], [32, 45], [33, 45], [29, 43], [34, 43]], 'focus': [32 * T, ped_y - 30],
@@ -638,9 +717,10 @@ def build_town(offs):
     place(m, 'floodlight', fx, fy, block=(fx, fy, 1, 1))
   for bx in (24, 36):
     img = SPRITES['bench'][0]
-    m.ent('bench', bx * T + (3 * T - img.width) // 2, (PITCH_Y - 1) * T - img.height + 2, (PITCH_Y - 2) * T)
+    idx = m.ent('bench', bx * T + (3 * T - img.width) // 2, (PITCH_Y - 1) * T - img.height + 2, (PITCH_Y - 2) * T)
     for i in range(3):
       m.seat(bx + i, PITCH_Y - 2, 'down')
+    m.attach(idx, [(bx + i, PITCH_Y - 2) for i in range(3)])
   place(m, 'signpost', 34, 50, block=(34, 50, 1, 1))
   m.objects.append({'id': 'pitch-sign', 'kind': 'sign',
                     'text': 'Football Ground: walk onto the pitch to play 2 v 2. Bots fill empty places.',
@@ -663,15 +743,35 @@ def build_town(offs):
   for (tx, ty, sid) in ((8, 37, 'tree2'), (13, 40, 'tree0'), (19, 37, 'tree4'), (6, 44, 'pine1'),
                         (16, 45, 'tree3'), (23, 47, 'tree5'), (41, 46, 'tree1'), (55, 46, 'tree_autumn'),
                         (57, 37, 'pine0'), (40, 36, 'tree3'), (24, 39, 'tree1'), (40, 41, 'tree4')):
+    if (tx, ty) == (8, 37):
+      # This meadow tree made way for the Agent Office. Its jitter is still drawn so every other
+      # tree keeps its exact place: creations hide trees by sprite and position.
+      rng.randint(-3, 3), rng.randint(-2, 2)
+      continue
     tree_at(m, rng, tx, ty, sid)
   place(m, 'log', 11, 42, block=(10, 42, 3, 1))
+
+  # The Agent Office: each visitor's own Möbius agents at work (the interior is private).
+  office = SPRITES['office_building'][0]
+  m.own(m.ent('office_building', OFFICE_X * T, (OFFICE_Y + OFFICE_H) * T - office.height),
+        OFFICE_X, OFFICE_Y, OFFICE_W, OFFICE_H)
+  door_row = OFFICE_Y + OFFICE_H - 1
+  for dx in (OFFICE_W // 2 - 1, OFFICE_W // 2):
+    m.door(OFFICE_X + dx, door_row, 'office', *interior_entry('office'), 'up')
+  pave(m, rect_cells(OFFICE_X + 1, door_row + 1, OFFICE_W - 2, 1), 'street')
+  sx = OFFICE_X + OFFICE_W
+  simg = SPRITES['sign_agents'][0]
+  m.own(m.ent('sign_agents', sx * T + (2 * T - simg.width) // 2, (door_row + 1) * T - simg.height),
+        sx, door_row, 2, 1)
+  m.objects.append({'id': 'sign-office', 'kind': 'sign', 'text': 'Agent Office',
+                    'use': [[sx, door_row + 1], [sx + 1, door_row + 1]]})
+  m.labels.append({'x': OFFICE_X * T + OFFICE_W * T // 2, 'y': OFFICE_Y * T - 12, 'text': 'Agent Office'})
   place(m, 'stump', 26, 47, block=(26, 47, 2, 1))
   place(m, 'rocks', 54, 45, block=(54, 45, 2, 1))
   place(m, 'signpost', 34, 36, block=(34, 36, 1, 1))
   m.objects.append({'id': 'welcome', 'kind': 'sign', 'text': 'Welcome to Möbius Town', 'use': [[33, 36], [34, 37]]})
   for (x, y) in ((27, 35), (35, 35)):
-    m.ent('hedge', x * T, y * T)
-    m.block(x, y, 2, 1)
+    m.own(m.ent('hedge', x * T, y * T), x, y, 2, 1)
 
   # Admire the strip from anywhere close to it, not just a few marked tiles.
   near_strip = disc_cells(garden_c[0], garden_c[1], 5.6)
@@ -729,13 +829,14 @@ def furniture(m, sid, tx, ty, solid=None, dy=0, dx=0, z=None):
   img = SPRITES[sid][0]
   x = tx * T + dx
   y = (ty + 1) * T - img.height + dy
-  m.ent(sid, x, y, z)
+  idx = m.ent(sid, x, y, z)
   if solid:
-    m.block(*solid)
+    m.own(idx, *solid)
 
 
 def wall_deco(m, sid, px, py):
   m.paint(SPRITES[sid][0], px, py)
+  m.decor.append([sid, int(px), int(py)])
 
 
 def game_table(m, sid, tid, kind, x0, row, sides):
@@ -797,6 +898,7 @@ def build_cinema():
   tvimg = SPRITES['tv'][0]
   tv_x, tv_y = 7 * T, T - 4
   m.paint(tvimg, tv_x, tv_y)
+  m.decor.append(['tv', tv_x, tv_y])
   m.objects.append({'id': 'tv', 'kind': 'tv', 'screen': [tv_x + 5, tv_y + 4, 54, 22],
                     'use': [[x, 3] for x in range(7, 11)] + [[x, 4] for x in range(7, 11)]})
   # Two rows of sofas facing the screen. The middle stays open: it is the walk from the door to the screen.
@@ -804,9 +906,10 @@ def build_cinema():
   for row_y, blocks in rows:
     for (x0, n) in blocks:
       m.paint(SPRITES[f'sofa{n}_seat'][0], x0 * T, row_y * T)
-      m.ent(f'sofa{n}_back', x0 * T - 2, row_y * T + 9, row_y * T + 16)
+      idx = m.ent(f'sofa{n}_back', x0 * T - 2, row_y * T + 9, row_y * T + 16)
       for i in range(n):
         m.seat(x0 + i, row_y, 'up')
+      m.attach(idx, [(x0 + i, row_y) for i in range(n)])
   furniture(m, 'popcorn', 16, 4, (16, 4, 1, 1))
   furniture(m, 'plant_big', 1, 4, (1, 4, 1, 1))
   return m
@@ -892,9 +995,10 @@ def build_hall():
   wall_deco(m, 'paint_land', 13 * T, 8)
   for (x0, y) in ((10, 10), (16, 10)):
     m.paint(SPRITES['bench3_seat'][0], x0 * T, y * T)
-    m.ent('bench3_back', x0 * T - 1, y * T + 10, y * T + 17)
+    idx = m.ent('bench3_back', x0 * T - 1, y * T + 10, y * T + 17)
     for i in range(3):
       m.seat(x0 + i, y, 'up')
+    m.attach(idx, [(x0 + i, y) for i in range(3)])
   m.objects.append({'id': 'lobby-desk', 'kind': 'sign', 'text': 'Meeting rooms on the left, auditorium on the right',
                     'use': [[13, 6], [14, 6]]})
   # Auditorium: stage with spotlight, curtains, podium, benches, event board.
@@ -908,13 +1012,81 @@ def build_hall():
   for y in (8, 10, 12, 14):
     for x0 in (21, 25):
       m.paint(SPRITES['bench3_seat'][0], x0 * T, y * T)
-      m.ent('bench3_back', x0 * T - 1, y * T + 10, y * T + 17)
+      idx = m.ent('bench3_back', x0 * T - 1, y * T + 10, y * T + 17)
       for i in range(3):
         m.seat(x0 + i, y, 'up')
+      m.attach(idx, [(x0 + i, y) for i in range(3)])
   m.labels += [
     {'x': 5 * T, 'y': 3 * T + 6, 'text': 'Meeting Room A'},
     {'x': 5 * T, 'y': 10 * T + 6, 'text': 'Meeting Room B'},
     {'x': 24 * T + 8, 'y': 7 * T, 'text': 'Auditorium'},
+  ]
+  return m
+
+
+def build_office():
+  """The Agent Office: where each visitor's own Möbius agents work.
+
+  Private: every visitor gets their own instance (the client never shows other players
+  in here), and the agents come from the visitor's own Möbius, never from the hub. Desks
+  and the places agents wander to are exported as `desk` and `poi` objects for the
+  client's office crew (engine/office.js).
+  """
+  m = interior('office', 'Agent Office',
+               lambda w, h: P.floor_carpet(w, h, (74, 86, 116, 255), (92, 106, 140, 255)),
+               (236, 236, 244, 255), (92, 84, 128, 255))
+  m.private = True
+  m.add_room('office', 'Agent Office', 'house', [(0, 0, m.w, m.h)])
+  # Kitchen tiles (top right) and the lounge rug (bottom left).
+  m.paint(P.floor_check(5 * T, 3 * T, (214, 214, 222, 255), (192, 194, 206, 255), 8), 16 * T, 3 * T)
+  m.paint(P.rug(5, 3, (110, 66, 92, 255), (210, 170, 110, 255)), 0 * T + 8, 9 * T)
+  # North wall: whiteboard over the meeting table, windows over the desks, a picture in the kitchen.
+  wall_deco(m, 'whiteboard', 1 * T + 6, T + 3)
+  for wx in (7, 10, 13):
+    wall_deco(m, 'window', wx * T, T + 2)
+  wall_deco(m, 'paint_land', 17 * T + 8, 8)
+  # Meeting table.
+  furniture(m, 'conf_table', 1, 5, (1, 4, 4, 2), dy=3)
+  meeting = []
+  for x in range(1, 5):
+    meeting.append(m.seat(x, 3, 'down', 'blue'))
+    meeting.append(m.seat(x, 6, 'up', 'blue'))
+  furniture(m, 'plant_big', 15, 3, (15, 3, 1, 1))
+  # Kitchen: counter with the espresso machine, and the water cooler.
+  furniture(m, 'counter', 16, 3, (16, 3, 5, 1), dy=-2)
+  furniture(m, 'cooler', 20, 5, (20, 5, 1, 1), dx=2)
+  # Desks: two rows of four. Each sitter faces their monitor (north); the chair is centred on
+  # the two-tile desk, so the tile beside the seat is blocked to keep people off the chair.
+  desk_no = 0
+  for row in (6, 9):
+    for col in (6, 9, 12, 15):
+      furniture(m, f'office_desk{desk_no % 4}', col, row, (col, row, 2, 1))
+      seat = m.seat(col, row + 1, 'up', 'blue', ax=(col + 1) * T, ay=(row + 1) * T + 12, id=f'desk-seat-{desk_no + 1}')
+      m.block(col + 1, row + 1)
+      m.objects.append({'id': f'desk-{desk_no + 1}', 'kind': 'desk', 'x': col, 'y': row, 'seat': seat,
+                        'seatX': col, 'seatY': row + 1})
+      desk_no += 1
+  # Lounge: a sofa facing a low table on the rug.
+  m.paint(SPRITES['sofa3_seat'][0], 1 * T, 11 * T)
+  sofa = m.ent('sofa3_back', 1 * T - 2, 11 * T + 9, 11 * T + 16)
+  lounge = [m.seat(1 + i, 11, 'up') for i in range(3)]
+  m.attach(sofa, [(1 + i, 11) for i in range(3)])
+  furniture(m, 'cafe_table', 2, 9, (2, 9, 1, 1), dx=-3)
+  furniture(m, 'plant_tall', 1, 12, (1, 12, 1, 1))
+  furniture(m, 'plant_big', 20, 11, (20, 11, 1, 1))
+  furniture(m, 'plant_tall', 20, 8, (20, 8, 1, 1))
+  # The directory by the door lists everyone working here.
+  furniture(m, 'directory', 13, 11, (13, 11, 2, 1), dx=1)
+  m.objects.append({'id': 'agent-directory', 'kind': 'directory', 'use': [[13, 12], [14, 12]]})
+  # Where agents go when they are not at their desks.
+  m.objects += [
+    {'id': 'poi-coffee', 'kind': 'poi', 'activity': 'coffee', 'face': 'up',
+     'spots': [[16, 4], [17, 4], [18, 4], [19, 4]]},
+    {'id': 'poi-cooler', 'kind': 'poi', 'activity': 'cooler', 'face': 'right', 'spots': [[19, 5]]},
+    {'id': 'poi-window', 'kind': 'poi', 'activity': 'window', 'face': 'up', 'spots': [[7, 3], [10, 3], [13, 3]]},
+    {'id': 'poi-plant', 'kind': 'poi', 'activity': 'plant', 'face': 'up', 'spots': [[15, 4]]},
+    {'id': 'poi-meeting', 'kind': 'poi', 'activity': 'meeting', 'seatIds': meeting},
+    {'id': 'poi-lounge', 'kind': 'poi', 'activity': 'lounge', 'seatIds': lounge},
   ]
   return m
 
@@ -963,6 +1135,13 @@ def write_meta(maps):
     'stages': {f"{m.id}:{o['room']}": o['tiles'] for m in maps for o in m.objects if o['kind'] == 'spotlight'},
     # The football ground: where players may join a match (field plus its one-tile margin, in tiles).
     'pitch': {'map': 'town', 'rect': [PITCH_X - 1, PITCH_Y - 1, PITCH_W + 2, PITCH_H + 2]},
+    # Maps every visitor gets an instance of their own (the Agent Office): nothing shared is built there.
+    'private': sorted(m.id for m in maps if m.private),
+    # What builders may not block or remove, and which furniture they may hide (key -> owned tiles).
+    'protected': {m.id: sorted([x, y] for (x, y) in m.protected) for m in maps},
+    'furniture': {m.id: {key: sorted([list(t) for t in m.ent_tiles.get(i, ())])
+                         for i, key in enumerate(m.ent_keys()) if i not in m.ent_protected}
+                  for m in maps},
   }
   text = ('"""Generated by tools/build_world.py: shared world facts for the hub. Do not edit."""\n'
           + 'META = ' + json.dumps(meta, indent=1, sort_keys=True) + '\n')
@@ -975,7 +1154,7 @@ def main():
   ap.add_argument('--debug', action='store_true', help='also write previews tinting walls red and seats green')
   args = ap.parse_args()
   offs = build_sprites()
-  maps = [build_town(offs), build_chess(), build_den(), build_cinema(), build_cafe(), build_hall()]
+  maps = [build_town(offs), build_chess(), build_den(), build_cinema(), build_cafe(), build_hall(), build_office()]
   town_doors = {d['to']: (d['x'], d['y']) for d in maps[0].doors}
   for m in maps[1:]:
     add_exit(m, town_doors[m.id])

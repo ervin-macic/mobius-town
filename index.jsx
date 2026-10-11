@@ -8,12 +8,17 @@ import { Dock, HelpCard, LiveTalk, Prompt, promptFor, Toasts, TopBar, ZoomContro
 import { ZOOM_MAX, ZOOM_MIN, ZOOM_STEP } from './engine/game.js'
 import { ChatPanel, PeoplePanel } from './ui/Panels.jsx'
 import EventsPanel from './ui/Events.jsx'
+import CreatePanel from './ui/Create.jsx'
 import Overlays from './ui/Overlays.jsx'
 import VideoStrip from './ui/VideoStrip.jsx'
 import PartyOverlay from './ui/Party.jsx'
 import { PitchLobby, Scoreboard, TouchPad } from './ui/Football.jsx'
+import { CourtBoard, CourtLobby, CourtTouch } from './ui/Court.jsx'
 import { StageControls, StageScreen } from './ui/StageScreen.jsx'
+import { Minimap, TownMap } from './ui/Minimap.jsx'
 import { PARTY_CSS } from './ui/partyCss.js'
+import OfficeOverlays from './ui/Office.jsx'
+import { OFFICE_CSS } from './ui/officeCss.js'
 
 // Pixel fonts arrive as bytes: the frame's policy has no data: font source,
 // and FontFace(name, buffer) involves no URL fetch at all.
@@ -109,7 +114,7 @@ export default function App({ appId, token }) {
 
   return (
     <div className="mt-root">
-      <style>{CSS + PARTY_CSS}</style>
+      <style>{CSS + PARTY_CSS + OFFICE_CSS}</style>
       {phase === 'loading' && <div className="mt-loading"><p>Loading Möbius Town…</p></div>}
       {phase === 'join' && profile && (
         <JoinScreen
@@ -163,6 +168,7 @@ function GameView({ town, profile, identity, onProfile, onLeave }) {
   const [panel, setPanel] = useState(null)
   const [editing, setEditing] = useState(false)
   const [help, setHelp] = useState(false)
+  const [mapOpen, setMapOpen] = useState(false)
   const [chatTab, setChatTab] = useState('nearby')
 
   useEffect(() => {
@@ -205,7 +211,11 @@ function GameView({ town, profile, identity, onProfile, onLeave }) {
 
   const party = state.world.party
   const partyOpen = !!party && !state.partyHidden
-  const modalOpen = editing || help || !!state.overlay || partyOpen
+  const modalOpen = editing || help || !!state.overlay || partyOpen || mapOpen
+  // A board, a party or a cutscene that opens takes over from the town map.
+  useEffect(() => {
+    if (state.overlay || partyOpen || state.cutscene) setMapOpen(false)
+  }, [state.overlay, partyOpen, state.cutscene])
   const [narrow, setNarrow] = useState(() => window.innerWidth < 720)
   useEffect(() => {
     const onResize = () => setNarrow(window.innerWidth < 720)
@@ -228,6 +238,20 @@ function GameView({ town, profile, identity, onProfile, onLeave }) {
           town.game.skipCutscene()
         }
         return
+      }
+      // Playing a court game: the keys drive your player, not your avatar.
+      if (town.courts.controlling() && !isTyping(e.target) && !modalOpen) {
+        const cdir = KEY_DIR[e.key]
+        if (cdir) {
+          e.preventDefault()
+          town.courts.key(cdir, true)
+          return
+        }
+        if (KICK_KEYS.has(e.key) || PASS_KEYS.has(e.key)) {
+          e.preventDefault()
+          if (!e.repeat) town.courts.button(KICK_KEYS.has(e.key) ? 'a' : 'b', true)
+          return
+        }
       }
       // Playing football: the keys drive your footballer, not your avatar.
       if (town.football.controlling() && !isTyping(e.target) && !modalOpen) {
@@ -252,8 +276,13 @@ function GameView({ town, profile, identity, onProfile, onLeave }) {
         // A party is modal: Leave (with its confirmation) is the way out until the final screen.
         if (partyOpen) return
         if (state.overlay) town.closeOverlay()
+        else if (mapOpen) setMapOpen(false)
         else if (panel) setPanel(null)
         else if (help) setHelp(false)
+        return
+      }
+      if (mapOpen && (e.key === 'n' || e.key === 'N') && !isTyping(e.target)) {
+        setMapOpen(false)
         return
       }
       if (isTyping(e.target) || modalOpen || e.metaKey || e.ctrlKey || e.altKey) return
@@ -276,6 +305,8 @@ function GameView({ town, profile, identity, onProfile, onLeave }) {
         case 'm': case 'M': town.toggleMic(); break
         case 'v': case 'V': town.toggleCam(); break
         case 'p': case 'P': setPanel((p) => (p === 'people' ? null : 'people')); break
+        case 'n': case 'N': if (!town.football.controlling()) setMapOpen(true); break
+        case 'c': case 'C': e.preventDefault(); setPanel((p) => (p === 'create' ? null : 'create')); break
         case '1': town.emote('wave'); break
         case '2': town.emote('heart'); break
         case '3': town.emote('excl'); break
@@ -291,6 +322,9 @@ function GameView({ town, profile, identity, onProfile, onLeave }) {
       const dir = KEY_DIR[e.key]
       if (dir) town.game?.releaseDir(dir)
       if (dir) town.football.key(dir, false)
+      if (dir) town.courts.key(dir, false)
+      if (KICK_KEYS.has(e.key)) town.courts.button('a', false)
+      if (PASS_KEYS.has(e.key)) town.courts.button('b', false)
       if (KICK_KEYS.has(e.key)) town.football.kick(false)
       if (PASS_KEYS.has(e.key)) town.football.pass(false)
     }
@@ -299,6 +333,9 @@ function GameView({ town, profile, identity, onProfile, onLeave }) {
       town.football.keys.clear()
       town.football.kick(false)
       town.football.pass(false)
+      town.courts.keys.clear()
+      town.courts.button('a', false)
+      town.courts.button('b', false)
     }
     window.addEventListener('keydown', down)
     window.addEventListener('keyup', up)
@@ -308,7 +345,7 @@ function GameView({ town, profile, identity, onProfile, onLeave }) {
       window.removeEventListener('keyup', up)
       window.removeEventListener('blur', blur)
     }
-  }, [town, panel, help, modalOpen, state.overlay, partyOpen])
+  }, [town, panel, help, modalOpen, state.overlay, partyOpen, mapOpen])
 
   const onPointerDown = (e) => {
     if (e.button !== 0 || !town.game) return
@@ -318,16 +355,21 @@ function GameView({ town, profile, identity, onProfile, onLeave }) {
       return
     }
     canvasRef.current?.focus({ preventScroll: true })
-    if (town.football.controlling()) return
+    if (town.football.controlling() || town.courts.controlling()) return
     const rect = canvasRef.current.getBoundingClientRect()
     town.tapAt(e.clientX - rect.left, e.clientY - rect.top)
   }
 
   const ui = state.ui
   const cinematic = !!state.cutscene
-  const playingFootball = !!state.football?.match?.player && !state.football.match.ended
+  const playingFootball = (!!state.football?.match?.player && !state.football.match.ended)
+    || (!!state.court?.match?.player && !state.court.match.ended)
+  const stripHidden = !state.call.available || modalOpen || cinematic || playingFootball || (narrow && !!panel)
+  // The minimap steps out of the way of the video tiles and of a presentation (see theme.js).
+  const stripShown = !stripHidden && (state.tiles.length > 0 || (state.call.state === 'live' && state.call.video && !state.call.screen))
+  const screenShown = (state.call.presenters || []).length > 0 && ui?.mapId === 'hall'
   return (
-    <div className={`mt-game-view${cinematic ? ' is-cinematic' : ''}`}>
+    <div className={`mt-game-view${cinematic ? ' is-cinematic' : ''}${stripShown ? ' has-strip' : ''}${screenShown ? ' has-screen' : ''}`}>
       <canvas
         ref={canvasRef}
         className="mt-canvas"
@@ -343,7 +385,7 @@ function GameView({ town, profile, identity, onProfile, onLeave }) {
             town={town}
             tiles={state.tiles}
             self={{ video: state.call.state === 'live' && state.call.video && !state.call.screen, audio: state.call.audio, look: profile.look }}
-            hidden={!state.call.available || modalOpen || cinematic || playingFootball || (narrow && !!panel)}
+            hidden={stripHidden}
           />
           <TopBar
             ui={ui}
@@ -361,7 +403,7 @@ function GameView({ town, profile, identity, onProfile, onLeave }) {
             eventsLive={(state.world.events || []).filter((ev) => ev.starts <= town.serverNow() && town.serverNow() <= ev.starts + ev.minutes * 60_000).length}
           />
           {state.ui?.mapId === 'hall' && <LiveTalk talk={state.liveTalk} />}
-          {!state.overlay && !cinematic && !playingFootball && !(state.football?.status === 'lobby' && state.football.mySlot) && (
+          {!state.overlay && !cinematic && !playingFootball && !(state.football?.status === 'lobby' && state.football.mySlot) && !state.court?.lobby && (
             <Prompt label={promptFor(ui.object, state.promptExtra)} onActivate={() => town.interact()} />
           )}
           {!modalOpen && !cinematic && <StageScreen town={town} state={state} />}
@@ -370,9 +412,13 @@ function GameView({ town, profile, identity, onProfile, onLeave }) {
             <ZoomControl zoom={state.zoom} min={ZOOM_MIN} max={ZOOM_MAX}
               onZoom={(d) => town.game?.zoomBy(d > 0 ? ZOOM_STEP : 1 / ZOOM_STEP)} onReset={() => town.game?.setZoom(1)} />
           )}
+          {!modalOpen && !cinematic && !playingFootball && <Minimap town={town} mapId={ui.mapId} onOpen={() => setMapOpen(true)} />}
           <Scoreboard town={town} state={state} />
           <PitchLobby town={town} state={state} />
           <TouchPad town={town} state={state} />
+          <CourtBoard town={town} state={state} />
+          <CourtLobby town={town} state={state} />
+          <CourtTouch town={town} state={state} />
           <Dock
             me={{ name: profile.name, look: profile.look }}
             call={state.call}
@@ -391,12 +437,19 @@ function GameView({ town, profile, identity, onProfile, onLeave }) {
             onPanel={(p) => setPanel((cur) => (cur === p ? null : p))}
             songs={state.songs}
             dancing={state.dancing}
+            building={state.building.sites.filter((s) => s.status === 'planning' || s.status === 'building').length}
           />
           {panel === 'chat' && <ChatPanel town={town} state={state} initialTab={chatTab} onClose={() => setPanel(null)} />}
           {panel === 'people' && <PeoplePanel town={town} state={state} onClose={() => setPanel(null)} />}
           {panel === 'events' && <EventsPanel town={town} state={state} onClose={() => setPanel(null)} />}
+          {panel === 'create' && <CreatePanel town={town} state={state} onClose={() => setPanel(null)} />}
           <Toasts toasts={state.toasts} onDismiss={(id) => town.dismissToast(id)} />
           <Overlays town={town} state={state} />
+          <OfficeOverlays town={town} state={state} />
+          {mapOpen && (
+            <TownMap town={town} state={state} onClose={() => setMapOpen(false)}
+              onTeleport={(pid) => { setMapOpen(false); town.teleportTo(pid) }} />
+          )}
           {partyOpen && (
             <PartyOverlay party={party} me={state.pid} serverNow={() => town.serverNow()}
               onAction={(action) => town.partyAction(action)} onClose={() => town.hideParty()} />

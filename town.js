@@ -1,7 +1,8 @@
 // Town: glues the game, the hub, the peer mesh and the call capability, and
 // exposes one immutable UI state for React (subscribe/snapshot).
 import { Game } from './engine/game.js'
-import { freeTileNear, getMap, objectById, roomAt } from './engine/maps.js'
+import { freeTileNear, getMap, inBounds, isPrivateMap, objectById, roomAt } from './engine/maps.js'
+import { landingSpot } from './engine/teleport.js'
 import { T } from './engine/assets.js'
 import * as chess from './games/chess.js'
 import * as c4 from './games/connect4.js'
@@ -12,7 +13,10 @@ import { Mesh } from './net/mesh.js'
 import { CallController, callCapabilityAvailable } from './av/call.js'
 import { audience, hearing, keepsMedia, wantsMedia } from './av/proximity.js'
 import { TownAudio } from './av/audio.js'
+import { AgentOffice, OFFICE_SIGN } from './agentOffice.js'
 import { MatchController, SLOTS } from './engine/match.js'
+import { Building } from './engine/building.js'
+import { CourtController } from './engine/courts.js'
 
 // The platform allows an app's service about 120 requests a minute per address,
 // and 60 a minute on the public route other installations forward through. So
@@ -32,6 +36,13 @@ const EVENT_TICK_MS = 1000
 
 // Music dips this long after the last word someone nearby said.
 const VOICE_DUCK_MS = 1400
+
+// Teleports: people this close to where you leave or land (and without a direct link) hear of it
+// by mail, at most this many; mail older than this is too late for the light show.
+const BEAM_NOTICE_TILES = 24
+const BEAM_NOTICE_MAX = 12
+const BEAM_FRESH_MS = 4000
+const prefersReducedMotion = () => !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
 
 const FORTUNES = [
   'A friend is about to say hello.', 'Your next game ends in a glorious win.', 'Someone nearby shares your taste in music.',
@@ -110,6 +121,8 @@ const INITIAL = {
   songs: [],
   sound: { music: true, sfx: true },
   liveTalk: null,
+  building: { sites: [], index: [], policy: 'everyone', keeper: false, handle: null },
+  court: { lobby: null, match: null },
 }
 
 export class Town {
@@ -140,6 +153,10 @@ export class Town {
     this.voiceAt = 0
     this.gains = {}
     this.football = new MatchController({ town: this })
+    // The Agent Office: your own Möbius agents at work (agentOffice.js).
+    this.office = new AgentOffice({ town: this })
+    this.building = new Building({ town: this })
+    this.courts = new CourtController({ town: this })
     this.botBusy = new Set()
     this.reminded = new Set()
     this.seenInvites = new Set()
@@ -147,6 +164,9 @@ export class Town {
     this.outgoing = new Map()
     this.serverOffset = 0
     this.lastTalkEnd = null
+    // Teleport notices: numbered from a random start so a reload never repeats one; seen ones once.
+    this.beamSeq = Math.floor(Math.random() * 1e9)
+    this.seenBeams = new Set()
     this.mesh = new Mesh({
       sendSignal: (to, data) => this.mail(to, 'rtc', data, true),
       onMessage: (from, msg) => this.onPeerMessage(from, msg),
@@ -181,6 +201,7 @@ export class Town {
       return null
     }
     const me = this.hello?.me
+    this.identityHandle = me?.handle || null
     return me ? { handle: me.handle, name: me.name, isHub: this.hello.isHub } : { problem: this.hello?.problem }
   }
 
@@ -208,7 +229,9 @@ export class Town {
     this.game.serverNow = () => this.serverNow()
     this.game.onFrame = (dt) => {
       this.footballFrame(dt)
+      this.courtFrame(dt)
       this.walkFrame()
+      this.office.frame(dt)
     }
     this.game.onZoom = (zoom) => this.set({ zoom })
     this.game.callsAvailable = this.call.available()
@@ -235,6 +258,7 @@ export class Town {
     clearInterval(this.proxTimer)
     clearInterval(this.eventTimer)
     this.sound.destroy()
+    this.office.stop()
     this.unsubGame?.()
     this.game?.stop()
     this.mesh.close()
@@ -271,6 +295,7 @@ export class Town {
       }
     }
     if (this.stopped) return
+    this.identityHandle = this.hello.me?.handle || null
     if (this.hello.problem || !this.hello.me) {
       this.set({ status: 'offline', problem: this.hello.problem })
       this.toast(this.hello.problem, { long: true })
@@ -412,6 +437,14 @@ export class Town {
       const info = { ...prev, ...p, hubAt: nowMs }
       this.peerInfo.set(p.pid, info)
       const fresh = this.mesh.lastHeard(p.pid) > nowMs - 2500 && prev?.p2pAt > nowMs - 2500
+      // In their own private place (an office) they are in an instance of their own: never in this
+      // world, so nobody is drawn, heard or linked across offices. The People list and the town map
+      // still show where they are (peerInfo). A direct link is fresher than the hub about it.
+      if (isPrivateMap(fresh ? prev.map : p.map)) {
+        if (fresh) info.map = prev.map
+        this.leaveWorld(p.pid)
+        continue
+      }
       const a = this.game.upsertOther(p.pid, {
         name: p.name, look: p.look, muted: p.muted || !p.av,
         ...(fresh ? {} : { mapId: p.map, x: p.x, y: p.y, dir: p.dir }),
@@ -435,6 +468,7 @@ export class Town {
       this.onMail(m.from, m.k, m.v)
     }
     if (res.world) this.applyWorld(res.world, res.wv)
+    this.building.onSync(res.cv)
     this.set({ online: (res.peers || []).length + 1 })
     this.updateMeshWants()
   }
@@ -492,6 +526,12 @@ export class Town {
     const partyPatch = this.applyParty(world, prev)
     this.football.setPitch(world.pitch)
     promptExtra.pitch = this.pitchPrompt(world.pitch)
+    this.building.onWorld(world)
+    this.courts.setCourts(world.courts)
+    for (const [cid, court] of Object.entries(world.courts || {})) {
+      const text = this.courtPrompt(court)
+      if (text) promptExtra[`court:${cid}`] = text
+    }
     this.set({
       world, chat, unread: this.state.unread + (firstLoad ? 0 : fresh.length),
       bubble: myBubble, promptExtra, ...partyPatch,
@@ -603,6 +643,14 @@ export class Town {
     this.set({ partyHidden: true })
   }
 
+  /** Take someone out of this world (they went into their own private place), keeping them in peerInfo. */
+  leaveWorld(pid) {
+    if (!this.game.others.has(pid)) return
+    this.game.removeOther(pid)
+    this.call.disconnect(pid)
+    this.sound.setDance(pid, null)
+  }
+
   nameOf(pid) {
     if (pid === this.pid) return this.profile?.name || 'You'
     const info = this.peerInfo.get(pid)
@@ -626,7 +674,9 @@ export class Town {
         if (typeof msg.s === 'number' && info.seq && msg.s <= info.seq) return
         Object.assign(info, { map: msg.m, x: msg.x, y: msg.y, dir: msg.d, seq: msg.s, p2pAt: performance.now() })
       }
-      if (getMap(msg.m) && Number.isInteger(msg.x) && Number.isInteger(msg.y)) {
+      if (isPrivateMap(msg.m)) {
+        this.leaveWorld(from)
+      } else if (getMap(msg.m) && Number.isInteger(msg.x) && Number.isInteger(msg.y)) {
         // Newer towns add the exact position; it must lie on (or next to) the tile they name.
         const exact = Number.isFinite(msg.fx) && Number.isFinite(msg.fy)
           && Math.abs(msg.fx - msg.x) <= 1 && Math.abs(msg.fy - msg.y) <= 1
@@ -638,6 +688,7 @@ export class Town {
       this.receiveChat(from, String(msg.text || '').slice(0, 280))
     } else if (msg.t === 'e') {
       if (['wave', 'heart', 'excl', 'q'].includes(msg.k)) this.game.showEmote(from, msg.k)
+      if (msg.k === 'tp-out' || msg.k === 'tp-in') this.onBeam(from, msg)
       if (msg.k === 'pet' && typeof msg.cat === 'string') this.game.petCat(msg.cat.slice(0, 24), true)
       if (msg.k === 'dance') {
         const song = typeof msg.song === 'string' ? msg.song.slice(0, 32) : null
@@ -647,6 +698,10 @@ export class Town {
       }
     } else if (msg.t === 'fbi' || msg.t === 'fbs') {
       this.football.onMessage(from, msg)
+    } else if (msg.t === 'fx' && typeof msg.c === 'string' && Number.isInteger(msg.i)) {
+      this.building.onPeer(from, msg)
+    } else if (msg.t === 'cgi' || msg.t === 'cgs') {
+      this.courts.onMessage(from, msg)
     } else if (msg.t === 'sig') {
       this.call.handleSignal(from, msg.data, this.pid > from)
     } else if (msg.t === 'n') {
@@ -662,7 +717,9 @@ export class Town {
     } else if (kind === 'chat') {
       this.receiveChat(from, String(value?.text || '').slice(0, 280))
     } else if (kind === 'emote') {
-      this.game.showEmote(from, value?.k)
+      // Teleport notices travel as emotes, so the hub passes them on and older towns ignore them.
+      if (value?.k === 'tp-out' || value?.k === 'tp-in') this.onBeam(from, value)
+      else this.game.showEmote(from, value?.k)
     } else if (kind === 'knock') {
       const name = value?.name || this.nameOf(from)
       this.toast(`${name} is knocking on the door.`, {
@@ -709,6 +766,7 @@ export class Town {
       this.proximityTick()
       const me = this.game.me
       this.sound.setListener({ map: this.game.mapId, x: me.x, y: me.y })
+      this.building.checkTriggers()
     } else if (type === 'sit') {
       if (payload.seat?.table) this.sitAtTable(payload.seat)
     } else if (type === 'stand') {
@@ -728,9 +786,12 @@ export class Town {
       this.sound.play(type === 'doorlock' ? 'lock' : 'unlock', { map: this.game.mapId, x: payload.x, y: payload.y })
     } else if (type === 'map') {
       this.wake()
+      this.office.onMap(payload.mapId)
       this.set({ overlay: null })
+      this.building.onMap(payload.mapId)
       this.applyScene()
-      this.sound.play('door')
+      // A teleport has its own sounds (teleportTo).
+      if (payload.how !== 'beam') this.sound.play('door')
       this.proximityTick()
     } else if (type === 'lockedout') {
       this.toast(`${payload.name || 'This room'} was locked just as you came in.`, {
@@ -792,6 +853,7 @@ export class Town {
     const sameMap = []
     for (const [pid, info] of this.peerInfo) {
       const a = this.game.others.get(pid)
+      if (!a && isPrivateMap(info.map)) continue
       if ((a?.mapId || info.map) === this.game.mapId) {
         const d = a ? Math.hypot(a.x - this.game.me.x, a.y - this.game.me.y) : 99
         sameMap.push([pid, d])
@@ -1191,6 +1253,25 @@ export class Town {
       : null
   }
 
+  /** Court games: run the court's match (if one is on) and hand the game what to draw. */
+  courtFrame(dt) {
+    this.courts.frame(dt)
+    const game = this.game
+    game.courtView = this.courts.view()
+    const hidden = this.courts.hiddenPids()
+    if (hidden) game.hiddenAvatars = game.hiddenAvatars ? new Set([...game.hiddenAvatars, ...hidden]) : hidden
+    if (!game.matchFit) game.matchFit = this.courts.fit()
+  }
+
+  courtPrompt(court) {
+    const mine = Object.values(court.slots || {}).includes(this.pid)
+    if (mine) return court.status === 'playing' ? 'You are playing' : 'You are in the line-up'
+    const free = Object.values(court.slots || {}).some((p) => !p)
+    if (court.status === 'playing') return free ? 'Join the match (take a bot\u2019s place)' : 'The match is full: watch from the side'
+    if (court.status === 'lobby') return 'Join the match'
+    return null
+  }
+
   pitchPrompt(pitch) {
     if (!pitch) return 'Play football'
     const mine = SLOTS.some((s) => pitch.slots?.[s] === this.pid)
@@ -1244,6 +1325,8 @@ export class Town {
   tapAt(sx, sy) {
     const tile = this.game.screenToTile(sx, sy)
     const map = this.game.map
+    // In the Agent Office, tapping one of your agents walks you over to talk to them.
+    if (this.office.tap(tile)) return
     // Tapping a cat walks over to it and pets it if it is still there.
     const cat = this.game.cats.find((c) => Math.abs(c.x / T - 0.5 - tile.x) < 1 && Math.abs((c.y - 13) / T - tile.y) < 1)
     if (cat) {
@@ -1274,10 +1357,15 @@ export class Town {
   }
 
   interact(objectId = null) {
+    if (this.game.beam) return
     const map = this.game.map
     const near = this.game.snapshot().object
     if (!objectId && near?.kind === 'cat') {
       this.petCat(near.id)
+      return
+    }
+    if (!objectId && near?.kind === 'agent') {
+      this.office.talkTo(near.id)
       return
     }
     const obj = objectId ? objectById(map, objectId) : (() => {
@@ -1331,6 +1419,15 @@ export class Town {
       case 'spotlight':
         this.toast("You're in the spotlight: everyone in the auditorium can hear and see you.")
         break
+      case 'directory':
+        this.office.openDirectory()
+        break
+      case 'cuse':
+        this.building.interact(obj)
+        break
+      case 'court':
+        if (!this.courts.isPlayer() && !this.courts.lobby()) this.courts.join(obj.creation)
+        break
       default:
     }
   }
@@ -1339,7 +1436,7 @@ export class Town {
 
   goTo(placeId) {
     const place = PLACES.find((p) => p.id === placeId)
-    if (!place || !this.game) return
+    if (!place || !this.game || this.game.beam) return
     const [x, y] = place.exact ? [place.x, place.y] : freeTileNear(getMap(place.map), place.x, place.y, 2)
     const ok = this.game.routeTo(place.map, x, y)
     if (!ok) this.toast("Can't find a way there from here.")
@@ -1349,6 +1446,123 @@ export class Town {
     const a = this.game?.others.get(pid)
     if (!a) return
     this.game.routeTo(a.mapId, a.x, a.y)
+  }
+
+  // --- teleporting ------------------------------------------------------------------------------
+
+  /** The "x,y" tiles people stand on, on `mapId`, so a teleport lands on nobody. */
+  occupiedTiles(mapId) {
+    const tiles = new Set()
+    for (const a of this.game.others.values()) if (a.mapId === mapId) tiles.add(`${a.x},${a.y}`)
+    return tiles
+  }
+
+  /** Where a teleport to `pid` lands right now (the rules: engine/teleport.js), or null. */
+  landingFor(pid) {
+    const info = this.peerInfo.get(pid)
+    if (!this.game || !info) return null
+    // Someone in their private office is not in this world: their last known place will do.
+    const a = this.game.others.get(pid) || (isPrivateMap(info.map) ? { mapId: info.map, x: info.x, y: info.y, dir: info.dir } : null)
+    if (!a) return null
+    return landingSpot({ map: a.mapId, x: a.x, y: a.y, dir: a.dir }, {
+      pid: this.pid, locks: this.state.world.locks, occupied: (mapId) => this.occupiedTiles(mapId),
+    })
+  }
+
+  /**
+   * Teleport next to someone, wherever they are in town: a beam out and a beam in (Game.beamTo),
+   * which the Möbians at both ends see too. A meeting room locked without you stops you at its
+   * door (with a knock on offer); someone in their private office, outside its building.
+   */
+  async teleportTo(pid) {
+    const game = this.game
+    if (!game || !this.pid || pid === this.pid || game.beam || game.cutscene || game.pendingDoor) return false
+    const name = this.nameOf(pid)
+    if (this.football.controlling()) {
+      this.toast('Finish the match first: your team needs you on the pitch.')
+      return false
+    }
+    const first = this.landingFor(pid)
+    if (!first) {
+      this.toast(this.peerInfo.has(pid) ? `There's nowhere free to land next to ${name} right now.` : `${name} has left the town.`)
+      return false
+    }
+    const me = game.me
+    const them = game.others.get(pid)
+    if (first.kind === 'near' && them.mapId === game.mapId && Math.hypot(them.x - me.x, them.y - me.y) < 1.6
+      && roomAt(game.map, me.x, me.y)?.id === roomAt(game.map, them.x, them.y)?.id) {
+      this.toast(`You're right next to ${name}.`)
+      return false
+    }
+    // Off to see them: out of any bubble (unless it is theirs), and the dance stops.
+    const bubble = this.state.bubble
+    if (bubble && !this.state.world.bubbles?.[bubble]?.members?.includes(pid)) this.act('bubble_leave')
+    if (me.dance) this.stopDance()
+    const reduced = prefersReducedMotion()
+    this.beamNotice('tp-out', { m: game.mapId, x: me.x, y: me.y })
+    this.sound.play('whoosh', { volume: 0.7 })
+    return game.beamTo(() => {
+      // Asked again at the jump: they may have walked on (or into a room) meanwhile.
+      const spot = this.landingFor(pid) || first
+      return { mapId: spot.map, x: spot.x, y: spot.y, dir: spot.dir, kind: spot.kind, room: spot.room }
+    }, { reduced, onLand: (spot, { arriveIn }) => this.landed(pid, name, spot, arriveIn) })
+  }
+
+  /** Just landed: the arrival chime, word to the people there, and why you are at a door. */
+  landed(pid, name, spot, arriveIn) {
+    setTimeout(() => this.sound.play('sparkle', { volume: 0.7 }), Math.max(0, arriveIn * 1000))
+    this.beamNotice('tp-in', { m: spot.mapId, x: spot.x, y: spot.y }, { to: pid, how: spot.kind })
+    if (spot.kind === 'locked' && spot.room) {
+      this.toast(`${name} is in ${spot.room.name}, and it's locked. Knock, and someone inside can let you in.`, {
+        actions: [{ label: 'Knock', primary: true, run: () => this.act('knock', { room: spot.room.id }) }],
+      })
+    } else if (spot.kind === 'private') {
+      this.toast(`${name} is in their office, so you've landed just outside.`)
+    }
+  }
+
+  /**
+   * Tell the Möbians around a teleport: over direct links at once, and by the hub's mailbox (as an
+   * 'emote', which every town accepts and older ones ignore) to those near it without a link.
+   */
+  beamNotice(kind, { m, x, y }, extra = {}) {
+    const n = ++this.beamSeq
+    this.mesh.broadcast({ t: 'e', k: kind, m, x, y, n, ...extra }, true)
+    const near = []
+    for (const [pid, info] of this.peerInfo) {
+      if (this.mesh.isOpen(pid)) continue
+      const a = this.game.others.get(pid)
+      const there = (a?.mapId || info.map) === m
+      const d = there ? Math.hypot((a?.x ?? info.x) - x, (a?.y ?? info.y) - y) : Infinity
+      if (pid === extra.to) near.push([-1, pid])
+      else if (d <= BEAM_NOTICE_TILES) near.push([d, pid])
+    }
+    near.sort((p, q) => p[0] - q[0])
+    const value = { k: kind, m, x, y, n, at: this.serverNow(), ...extra }
+    for (const [, pid] of near.slice(0, BEAM_NOTICE_MAX)) this.mail(pid, 'emote', value)
+    if (near.length) this.wake()
+  }
+
+  /** Someone else's teleport notice (direct or by mail): their light show, and a hello if it was to you. */
+  onBeam(from, v) {
+    const map = getMap(v?.m)
+    if (!map || !Number.isInteger(v.x) || !Number.isInteger(v.y) || !inBounds(map, v.x, v.y)) return
+    const id = `${from}:${v.k}:${v.n}`
+    if (this.seenBeams.has(id)) return
+    this.seenBeams.add(id)
+    if (this.seenBeams.size > 200) this.seenBeams.delete(this.seenBeams.values().next().value)
+    const age = Number.isFinite(v.at) ? this.serverNow() - v.at : 0
+    const kind = v.k === 'tp-in' ? 'in' : 'out'
+    // Late mail (a hidden tab catching up) is old news; and nobody is shown on a private map.
+    if (age < BEAM_FRESH_MS && !isPrivateMap(map.id)) {
+      this.game.beamFx(from, kind, map.id, v.x, v.y, { reduced: prefersReducedMotion() })
+      if (map.id === this.game.mapId) this.sound.play(kind === 'in' ? 'sparkle' : 'whoosh', { map: map.id, x: v.x, y: v.y, volume: 0.55 })
+    }
+    if (kind === 'in' && v.to === this.pid && age < 15000) {
+      const name = this.nameOf(from)
+      this.toast(v.how === 'locked' ? `${name} teleported to the door of your room.`
+        : v.how === 'private' ? `${name} teleported to the door of your office.` : `${name} teleported to you.`)
+    }
   }
 
   // --- table games ---------------------------------------------------------------------------------------
@@ -1426,6 +1640,7 @@ export class Town {
   /** Reminders, and the auditorium's live talk board. Runs every second. */
   eventTick() {
     if (!this.game) return
+    this.building.tick()
     const now = this.serverNow()
     const events = this.state.world.events || []
     for (const ev of events) {
@@ -1622,6 +1837,7 @@ export const PLACES = [
   { id: 'garden', name: 'Möbius Garden', map: 'town', x: 32, y: 45, exact: true },
   { id: 'pond', name: 'Pond', map: 'town', x: 48, y: 45 },
   { id: 'football', name: 'Football Ground', map: 'town', x: 32, y: 53, exact: true },
+  { id: 'office', name: 'Agent Office', map: 'office', x: 11, y: 11, exact: true },
 ]
 
 const PLACE_NAMES = {
@@ -1638,5 +1854,6 @@ const SIGN_TEXT = {
   'sign-cinema': 'Walk up to the screen and press X to choose what plays.',
   'sign-cafe': 'Grab a table and catch up. Bubbles welcome.',
   'lobby-desk': 'The meeting rooms on the left can be locked from inside. The auditorium on the right has a spotlight on stage: whoever stands in it is heard by the whole room.',
+  'sign-office': OFFICE_SIGN,
   statue: 'A statue of the first Möbius agent, who laid out these streets. The plaque reads: “Built by agents, for people.”',
 }

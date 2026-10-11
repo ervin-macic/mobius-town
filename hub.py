@@ -7,10 +7,13 @@ Pure state logic over SQLite so it can be tested without HTTP. The service
 - Presence: who is online, where they stand and how they look.
 - Mailbox: small directed messages (WebRTC signalling, knocks, chat fallback).
 - World: one versioned document with room locks, conversation bubbles, the
-  cinema TV, table games, the town chat, scheduled events and party
-  challenges. Clients refetch it only when the version changes. Parties hold
-  secrets (the Quick Draw moment, hidden picks), so a client never receives
-  the stored world: world_for() swaps them for that viewer's own party view.
+  cinema TV, table games, the town chat, scheduled events, party challenges,
+  build sites and court-game lobbies. Clients refetch it only when the
+  version changes. Parties hold secrets (the Quick Draw moment, hidden picks),
+  so a client never receives the stored world: world_for() swaps them for that
+  viewer's own party view.
+- Creations: what Möbians build in town (creations.py), versioned separately
+  (`cv`) because their pictures are large; towns fetch only what changed.
 
 Movement is client-authoritative (it is a social space); anything shared and
 contested (locks, games) is decided here.
@@ -27,7 +30,9 @@ import time
 
 import chess_rules
 import connect4_rules
+import creations as cr
 import party as party_rules
+from creations import Problem, require  # noqa: F401  (re-exported for service.py and tests)
 from world_meta import META
 
 ONLINE_SECONDS = 15
@@ -45,18 +50,6 @@ DIRS = {'up', 'down', 'left', 'right'}
 LOOK_RANGES = {'body': 2, 'skin': 5, 'hair': 8, 'shirt': 10, 'pants': 6}
 VIDEO_ID = re.compile(r'^[A-Za-z0-9_-]{11}$')
 HANDLE = re.compile(r'^[a-z0-9][a-z0-9._-]{0,63}$')
-
-
-class Problem(Exception):
-  def __init__(self, message: str, status: int = 400):
-    super().__init__(message)
-    self.message = message
-    self.status = status
-
-
-def require(condition, message: str, status: int = 400):
-  if not condition:
-    raise Problem(message, status)
 
 
 def now_s() -> float:
@@ -87,7 +80,7 @@ CREATE TABLE IF NOT EXISTS world (k TEXT PRIMARY KEY, v TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS counters (k TEXT PRIMARY KEY, v INTEGER NOT NULL);
 """
 
-WORLD_KEYS = ('locks', 'bubbles', 'tv', 'games', 'feed', 'events', 'invites', 'parties', 'pitch')
+WORLD_KEYS = ('locks', 'bubbles', 'tv', 'games', 'feed', 'events', 'invites', 'parties', 'pitch', 'sites', 'courts')
 BOT_LEVELS = ('easy', 'medium', 'hard')
 EVENT_KINDS = ('talks', 'meetup', 'games')
 EVENT_PLACES = ('stage', 'plaza', 'cafe', 'cinema', 'garden', 'meet-a', 'meet-b')
@@ -111,6 +104,7 @@ def connect(path) -> sqlite3.Connection:
   db.execute('PRAGMA synchronous=NORMAL')
   db.execute('PRAGMA busy_timeout=10000')
   db.executescript(SCHEMA)
+  cr.setup(db)
   return db
 
 
@@ -337,6 +331,9 @@ def housekeeping(db, world, players, now):
       ev['current'] = None
   party_housekeeping(world, by_pid, now)
   pitch_housekeeping(world, by_pid, now)
+  cr.sites_housekeeping(world, now)
+  cr.expire(db, now)
+  courts_housekeeping(db, world, by_pid, now)
 
 
 # --- Games ---------------------------------------------------------------------------------------------
@@ -733,6 +730,7 @@ def sync(db, pid: str, handle: str, host: str, cid: str, body: dict, now: float 
   since = body.get('since') if isinstance(body.get('since'), int) else -1
   with Tx(db):
     upsert_presence(db, pid, handle, host, cid, name, look, st, now)
+    cr.remember_person(db, handle, name, now)
     players = online(db, now)
     online_pids = {p['pid'] for p in players}
     for msg in out:
@@ -757,14 +755,15 @@ def sync(db, pid: str, handle: str, host: str, cid: str, body: dict, now: float 
     housekeeping(db, world, players, now)
     save_world(db, before, world)
     wv = world_version(db)
+    cv = cr.creations_version(db)
   peers = [peer_view(p, now) for p in players if p['pid'] != pid]
   return {
-    'now': ms(now), 'pid': pid, 'peers': peers, 'inbox': inbox, 'wv': wv,
+    'now': ms(now), 'pid': pid, 'peers': peers, 'inbox': inbox, 'wv': wv, 'cv': cv,
     'world': world_for(world, pid, now) if since != wv else None,
   }
 
 
-def act(db, pid: str, body: dict, now: float | None = None) -> dict:
+def act(db, pid: str, body: dict, now: float | None = None, keeper: str | None = None) -> dict:
   now = now or now_s()
   require(isinstance(body, dict), 'Invalid request.')
   op = body.get('op')
@@ -772,6 +771,7 @@ def act(db, pid: str, body: dict, now: float | None = None) -> dict:
     me = db.execute('SELECT * FROM presence WHERE pid = ?', (pid,)).fetchone()
     require(me is not None and now - me['seen'] < ONLINE_SECONDS, 'Rejoin the town first.', 409)
     me = dict(me)
+    me['keeper'] = bool(keeper) and me['handle'] == keeper
     players = online(db, now)
     by_pid = {p['pid']: p for p in players}
     world = load_world(db)
@@ -1079,6 +1079,237 @@ def act_talk_stop(db, world, me, by_pid, body, now):
   return {'event': ev}
 
 
+
+# --- Court games on built courts (the pitch's rules, for any court a Möbian builds) ----------------------
+#
+# Each creation with a `game` has a court; walking onto it and joining fills one of its places
+# (team id + index, e.g. red0 red1 blue0 blue1). As on the pitch, one human player's browser runs the
+# match (the game's sandboxed cartridge) and streams it to the others; the hub keeps line-up and result.
+
+COURT_STALE_EXTRA_SECONDS = 300
+
+
+def court_slot_ids(info):
+  return [f'{team}{i}' for team in info['teams'] for i in range(info['perTeam'])]
+
+
+def new_court(info):
+  # devices: the device (client id) that took each place. A player id moves to a new device once the
+  # old one has been gone a while, and that device must not inherit a place in someone's match.
+  return {'status': 'idle', 'slots': {s: None for s in court_slot_ids(info)}, 'names': {}, 'devices': {},
+          'match': None, 'kickoff_at': None, 'level': 'medium', 'score': {t: 0 for t in info['teams']}, 'last': None}
+
+
+def court_of(world, cid, info):
+  courts = world.setdefault('courts', {})
+  court = courts.get(cid)
+  if court is None or set(court.get('slots', {})) != set(court_slot_ids(info)):
+    court = courts[cid] = new_court(info)
+  return court
+
+
+def court_humans(court):
+  return [pid for pid in court['slots'].values() if pid]
+
+
+def on_court(player, info) -> bool:
+  x, y, w, h = info['court']
+  return player['map'] == info['map'] and x - 1 <= player['x'] < x + w + 1 and y - 1 <= player['y'] < y + h + 1
+
+
+def court_reset(court, info, result=None):
+  last = result or court.get('last')
+  level = court.get('level', 'medium')
+  court.clear()
+  court.update(new_court(info))
+  court['last'] = last
+  court['level'] = level
+
+
+def courts_housekeeping(db, world, by_pid, now):
+  courts = world.setdefault('courts', {})
+  infos = cr.game_courts(db) if courts else {}
+  t = ms(now)
+  for cid in list(courts):
+    info = infos.get(cid)
+    if info is None:
+      del courts[cid]
+      continue
+    court = court_of(world, cid, info)
+    devices = court.setdefault('devices', {})
+    for slot, pid in court['slots'].items():
+      if pid and (pid not in by_pid or by_pid[pid]['map'] != info['map']
+                  or devices.get(slot, by_pid[pid]['cid']) != by_pid[pid]['cid']
+                  or (court['status'] != 'playing' and not on_court(by_pid[pid], info))):
+        court['slots'][slot] = None
+        devices.pop(slot, None)
+    humans = court_humans(court)
+    if court['status'] == 'lobby':
+      if not humans:
+        court_reset(court, info)
+      elif t >= court['kickoff_at']:
+        court.update({
+          'status': 'playing', 'kickoff_at': None, 'score': {team: 0 for team in info['teams']},
+          'match': {'id': secrets.token_hex(5), 'host': humans[0], 'seed': random.randrange(1, 1 << 30),
+                    'started': t, 'duration': info['durationSeconds']},
+        })
+    elif court['status'] == 'playing':
+      match = court['match']
+      if not humans or t - match['started'] > (info['durationSeconds'] + COURT_STALE_EXTRA_SECONDS) * 1000:
+        court_reset(court, info)
+      elif match['host'] not in humans:
+        match['host'] = humans[0]
+    elif court['status'] == 'idle' and not humans and not court.get('last'):
+      del courts[cid]
+
+
+def court_info(db, body):
+  cid = body.get('court')
+  require(isinstance(cid, str), 'Which court?')
+  info = cr.game_courts(db).get(cid)
+  require(info is not None, 'That court is gone.', 404)
+  return cid, info
+
+
+def act_court_join(db, world, me, by_pid, body, now):
+  cid, info = court_info(db, body)
+  require(on_court(me, info), 'Walk onto the court to join a match.')
+  court = court_of(world, cid, info)
+  team = body.get('team')
+  require(team is None or team in info['teams'], 'Pick one of the two teams.')
+  mine = next((s for s, pid in court['slots'].items() if pid == me['pid']), None)
+  if mine and (team is None or mine.startswith(team)):
+    return {'slot': mine}
+  free = [s for s, pid in court['slots'].items() if not pid]
+  if team:
+    free = [s for s in free if s.startswith(team)]
+  else:
+    count = {tm: sum(1 for s, pid in court['slots'].items() if s.startswith(tm) and pid) for tm in info['teams']}
+    order = {tm: i for i, tm in enumerate(info['teams'])}
+    free.sort(key=lambda s: (count[s.rstrip('0123456789')], order[s.rstrip('0123456789')]))
+  require(free, 'That team is full.' if team else 'The match is full. Watch from the side, or wait for the next one.')
+  devices = court.setdefault('devices', {})
+  if mine:
+    court['slots'][mine] = None
+    devices.pop(mine, None)
+  slot = free[0]
+  court['slots'][slot] = me['pid']
+  devices[slot] = me['cid']
+  court['names'][me['pid']] = me['name']
+  if court['status'] == 'idle':
+    court.update({'status': 'lobby', 'kickoff_at': ms(now) + int(info['lobbySeconds'] * 1000), 'match': None})
+  return {'slot': slot}
+
+
+def act_court_leave(db, world, me, by_pid, body, now):
+  cid, info = court_info(db, body)
+  court = court_of(world, cid, info)
+  for slot, pid in court['slots'].items():
+    if pid == me['pid']:
+      court['slots'][slot] = None
+      court.setdefault('devices', {}).pop(slot, None)
+  humans = court_humans(court)
+  if not humans:
+    court_reset(court, info)
+  elif court['status'] == 'playing' and court['match']['host'] == me['pid']:
+    court['match']['host'] = humans[0]
+  return {'ok': True}
+
+
+def act_court_level(db, world, me, by_pid, body, now):
+  cid, info = court_info(db, body)
+  court = court_of(world, cid, info)
+  level = body.get('level')
+  require(level in BOT_LEVELS, 'Pick easy, medium or hard bots.')
+  require(me['pid'] in court_humans(court), 'Join the match first.')
+  require(court['status'] != 'playing', 'The match has already started.')
+  court['level'] = level
+  return {'ok': True}
+
+
+def court_host_match(court, info, me, body):
+  match = court.get('match')
+  require(court['status'] == 'playing' and match and match['id'] == body.get('id'), 'That match is over.')
+  require(match['host'] == me['pid'], 'Only the player running the match can report it.', 403)
+  score = body.get('score')
+  require(isinstance(score, dict) and set(score) == set(info['teams'])
+          and all(isinstance(v, int) and not isinstance(v, bool) and 0 <= v <= 999 for v in score.values()),
+          'Invalid score.')
+  return match, score
+
+
+def act_court_score(db, world, me, by_pid, body, now):
+  cid, info = court_info(db, body)
+  court = court_of(world, cid, info)
+  _match, score = court_host_match(court, info, me, body)
+  court['score'] = score
+  return {'ok': True}
+
+
+def act_court_result(db, world, me, by_pid, body, now):
+  cid, info = court_info(db, body)
+  court = court_of(world, cid, info)
+  match, score = court_host_match(court, info, me, body)
+  a, b = info['teams']
+  winner = a if score[a] > score[b] else b if score[b] > score[a] else 'draw'
+  names = {pid: court['names'].get(pid) for pid in court['slots'].values() if pid}
+  court_reset(court, info, {'id': match['id'], 'score': score, 'winner': winner, 'at': ms(now),
+                            'players': dict(court['slots']), 'names': names})
+  return {'ok': True}
+
+
+# --- Building: sites from the town, triggers, removal ----------------------------------------------------------
+
+def act_site_begin(db, world, me, by_pid, body, now):
+  site = cr.site_begin(world, handle=me['handle'], name=me['name'], pid=me['pid'], keeper=me['keeper'],
+                       map_id=me['map'], x=me['x'], y=me['y'], direction=me['dir'], text=body.get('text'),
+                       now=now, pol=cr.policy(db))
+  replace = body.get('replace')
+  if replace:
+    info = db.execute('SELECT handle, map, area FROM creations WHERE id = ?', (replace,)).fetchone()
+    if info is None or not (me['keeper'] or info['handle'] == me['handle']):
+      del world['sites'][site['id']]
+    require(info is not None, 'That creation no longer exists.', 404)
+    require(me['keeper'] or info['handle'] == me['handle'], 'Only its builder or the town keeper can change that.', 403)
+    # The construction site goes up around the creation being changed, wherever you asked from.
+    x, y, w, h = json.loads(info['area'])
+    site.update({'replace': replace, 'map': info['map'], 'area': [x, y, w, h], 'x': x + w // 2, 'y': y + h // 2,
+                 'dir': 'down'})
+  return {'site': site}
+
+
+def act_site_chat(db, world, me, by_pid, body, now):
+  site = cr.site_of(world, body.get('site'), me['handle'], me['keeper'])
+  chat = body.get('chat')
+  require(isinstance(chat, str) and re.fullmatch(r'[A-Za-z0-9-]{8,64}', chat), 'Invalid chat id.')
+  site['chat'] = chat
+  return {'ok': True}
+
+
+def act_site_cancel(db, world, me, by_pid, body, now):
+  site = cr.site_of(world, body.get('site'), me['handle'], me['keeper'])
+  if site['status'] in cr.SITE_ACTIVE:
+    cr.site_finish(world, sid=site['id'], status='cancelled', now=now, message='Build cancelled.')
+  return {'ok': True}
+
+
+def act_trigger_fire(db, world, me, by_pid, body, now):
+  return cr.fire(db, cid=body.get('creation'), trig=body.get('trigger'), handle=me['handle'], name=me['name'],
+                 now=now)
+
+
+def act_creation_remove(db, world, me, by_pid, body, now):
+  return cr.remove(db, handle=me['handle'], keeper=me['keeper'], cid=body.get('id'))
+
+
+def act_build_policy(db, world, me, by_pid, body, now):
+  require(me['keeper'], 'Only the town keeper can change who may build.', 403)
+  value = body.get('policy')
+  require(value in cr.POLICIES, 'Building is open to everyone, or to the keeper only.')
+  cr.set_setting(db, 'build_policy', value)
+  cr.bump(db)
+  return {'policy': value}
+
 ACTIONS = {
   'lock': act_lock, 'unlock': act_unlock, 'knock': act_knock, 'admit': act_admit,
   'bubble': act_bubble, 'bubble_join': act_bubble_join, 'bubble_leave': act_bubble_leave,
@@ -1090,6 +1321,10 @@ ACTIONS = {
   'party_challenge': act_party_challenge, 'party_answer': act_party_answer, 'party_act': act_party_act,
   'pitch_join': act_pitch_join, 'pitch_leave': act_pitch_leave, 'pitch_level': act_pitch_level,
   'pitch_score': act_pitch_score, 'pitch_result': act_pitch_result,
+  'court_join': act_court_join, 'court_leave': act_court_leave, 'court_level': act_court_level,
+  'court_score': act_court_score, 'court_result': act_court_result,
+  'site_begin': act_site_begin, 'site_chat': act_site_chat, 'site_cancel': act_site_cancel,
+  'trigger_fire': act_trigger_fire, 'creation_remove': act_creation_remove, 'build_policy': act_build_policy,
 }
 
 
@@ -1099,3 +1334,79 @@ def leave(db, pid: str, now: float | None = None) -> dict:
     db.execute('UPDATE presence SET seen = ? WHERE pid = ?', (now - ONLINE_SECONDS - 1, pid))
     db.execute('DELETE FROM mail WHERE to_pid = ?', (pid,))
   return {'ok': True}
+
+
+# --- Reading creations, and the builder's commands ------------------------------------------------------------
+
+def read(db, handle: str, name: str, body: dict) -> dict:
+  """What a town fetches about creations: the index (when `cv` changed) and bodies by id."""
+  require(isinstance(body, dict), 'Invalid request.')
+  op = body.get('op')
+  if op == 'index':
+    return {'cv': cr.creations_version(db), 'index': cr.index(db, handle, name), 'policy': cr.policy(db)}
+  if op == 'bodies':
+    return cr.bodies(db, body.get('ids'), handle, name)
+  raise Problem('Unknown request.')
+
+
+def build(db, handle: str, name: str, keeper: str | None, body: dict, now: float | None = None) -> dict:
+  """A builder agent's command (from `forge/town.py` through the builder's own Möbius)."""
+  now = now or now_s()
+  require(isinstance(body, dict), 'Invalid request.')
+  require(HANDLE.match(handle or ''), 'Invalid Möbius handle.', 403)
+  is_keeper = bool(keeper) and handle == keeper
+  op = body.get('op')
+  if op in ('bodies', 'index'):
+    return read(db, handle, name, body)
+  if op == 'spec':
+    return cr.spec_of(db, body.get('id'), handle, is_keeper)
+  if op == 'list':
+    return {'creations': cr.list_brief(db), 'policy': cr.policy(db), 'keeper': is_keeper}
+  with Tx(db):
+    world = load_world(db)
+    before = copy(world)
+    if op == 'look':
+      site = cr.site_of(world, body.get('site'), handle, is_keeper)
+      out = {
+        'site': site, 'policy': cr.policy(db), 'keeper': is_keeper, 'limits': cr.LIMITS,
+        'people': cr.people(db), 'index': cr.index(db, handle, name), 'cv': cr.creations_version(db),
+        'online': [{'name': p['name'], 'handle': p['handle'], 'map': p['map'], 'x': p['x'], 'y': p['y']}
+                   for p in online(db, now)],
+      }
+    elif op == 'begin':
+      map_id, at = body.get('map'), body.get('at')
+      require(map_id in META['maps'] and isinstance(at, list) and len(at) == 2
+              and all(isinstance(v, int) for v in at), 'Say where: a map and a tile [x, y].')
+      site = cr.site_begin(world, handle=handle, name=name, pid=None, keeper=is_keeper, map_id=map_id, x=at[0],
+                           y=at[1], direction=body.get('dir') if body.get('dir') in DIRS else 'down',
+                           text=body.get('text'), now=now, pol=cr.policy(db))
+      out = {'site': site}
+    elif op == 'progress':
+      out = {'site': cr.site_update(world, sid=body.get('site'), handle=handle, keeper=is_keeper, body=body, now=now)}
+    elif op == 'put':
+      sid = body.get('site')
+      site = world.get('sites', {}).get(sid) if sid else None
+      if site is not None:
+        cr.site_of(world, sid, handle, is_keeper)
+      else:
+        # The site may have closed while the builder was still refining: replacing needs no site.
+        require(body.get('replace') or not sid, 'That build site has closed. Start a new build from the town.', 404)
+        sid = None
+      replace = body.get('replace') or (site or {}).get('replace') or (site or {}).get('creation')
+      result = cr.put(db, handle=handle, name=name, keeper=is_keeper, body=body.get('creation'),
+                      spec=body.get('spec'), replace=replace, now=now)
+      if site:
+        cr.site_finish(world, sid=sid, status='done', now=now, creation=result['id'], area=result['area'],
+                       message=result['title'])
+      out = result
+    elif op == 'fail':
+      site = cr.site_of(world, body.get('site'), handle, is_keeper)
+      cr.site_finish(world, sid=site['id'], status='failed', now=now,
+                     message=body.get('message') or 'The builder could not finish this one.')
+      out = {'site': world['sites'][site['id']]}
+    elif op == 'remove':
+      out = cr.remove(db, handle=handle, keeper=is_keeper, cid=body.get('id'))
+    else:
+      raise Problem('Unknown builder command.')
+    save_world(db, before, world)
+  return out

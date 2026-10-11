@@ -4,6 +4,8 @@ import { avatarSheet, DIR_ROW, FEET_Y, FRAME_H, FRAME_W, sprite, T, WAVE_COL } f
 import { MobiusRenderer } from './mobius.js'
 import { cutsceneFocus, drawCutsceneScreen, drawCutsceneWorld } from './cutscenes.js'
 import { catSprites, CAT_PET_SECONDS } from './cats.js'
+import { beamHidden, drawBeam } from './beam.js'
+import { drawSite, siteLabel } from './effects.js'
 
 const NAME_FONT = '600 {px}px ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif'
 const font = (px) => NAME_FONT.replace('{px}', String(Math.round(px)))
@@ -28,6 +30,95 @@ function drawSprite(ctx, atlas, name, x, y, time) {
 
 function spriteWidth(name) {
   return sprite(name)?.f[0][2] || 96
+}
+
+/** A creation's picture (one of its frames), with its gentle motion. */
+function drawPiece(ctx, p, time) {
+  const frames = p.frames
+  const img = frames.length > 1 && p.fps ? frames[Math.floor(time * p.fps) % frames.length] : frames[0]
+  if (!img?.complete || !img.naturalWidth) return
+  let x = p.x
+  let y = p.y
+  if (p.fx === 'sway') x += Math.round(Math.sin(time * 1.6 + p.x * 0.07))
+  else if (p.fx === 'bob') y += Math.round(Math.sin(time * 2.2 + p.x * 0.05) * 1.5)
+  if (p.fx === 'twinkle') ctx.globalAlpha = 0.75 + 0.25 * Math.sin(time * 5 + p.x)
+  ctx.drawImage(img, x, y)
+  ctx.globalAlpha = 1
+}
+
+/** Soft lights from lamps, candles and anything a creation lights up. */
+function drawGlows(ctx, game) {
+  const glows = game.map.glows
+  if (!glows?.length) return
+  ctx.save()
+  // 'screen' brightens towards the light's colour without blowing grass out to lime; by day,
+  // outdoors, a lamp only hints at its glow.
+  ctx.globalCompositeOperation = 'screen'
+  const day = game.map.outdoor ? 0.45 : 1
+  for (const gl of glows) {
+    const r = gl.radius * T
+    const f = (gl.flicker ? 0.75 + 0.15 * Math.sin(game.time * 11 + gl.x) + 0.1 * Math.sin(game.time * 7.3) : 1) * day
+    const g = ctx.createRadialGradient(gl.x, gl.y, 1, gl.x, gl.y, r)
+    const c = gl.colour.replace('#', '')
+    const rgb = [0, 2, 4].map((i) => parseInt(c.slice(i, i + 2), 16)).join(',')
+    g.addColorStop(0, `rgba(${rgb},${0.34 * f})`)
+    g.addColorStop(0.45, `rgba(${rgb},${0.12 * f})`)
+    g.addColorStop(1, `rgba(${rgb},0)`)
+    ctx.fillStyle = g
+    ctx.fillRect(gl.x - r, gl.y - r, r * 2, r * 2)
+  }
+  ctx.restore()
+}
+
+/** A room's mood: lighter, darker, warmer, cooler, tinted (its whole room, or its area outdoors). */
+function drawMoods(ctx, game, mapW, mapH) {
+  const moods = game.map.moods
+  if (!moods?.length) return
+  const me = game.me
+  const myRoom = game.map.rooms[game.map.roomIdx?.[me.y * game.map.w + me.x]]?.id
+  for (const { mood, rect, room } of moods) {
+    if (!rect && room !== myRoom) continue
+    const [x, y, w, h] = rect ? [rect[0] * T, rect[1] * T, rect[2] * T, rect[3] * T] : [0, 0, mapW, mapH]
+    ctx.save()
+    const b = mood.brightness || 0
+    const warm = mood.warmth || 0
+    if (b > 0) {
+      ctx.globalCompositeOperation = 'screen'
+      ctx.fillStyle = `rgba(255,248,236,${Math.min(0.5, b * 0.45)})`
+      ctx.fillRect(x, y, w, h)
+    } else if (b < 0) {
+      ctx.globalCompositeOperation = 'multiply'
+      ctx.fillStyle = `rgba(60,56,110,${Math.min(0.75, -b * 0.7)})`
+      ctx.fillRect(x, y, w, h)
+    }
+    if (warm) {
+      ctx.globalCompositeOperation = 'soft-light'
+      ctx.fillStyle = warm > 0 ? `rgba(255,170,90,${Math.min(0.6, warm * 0.5)})` : `rgba(110,160,255,${Math.min(0.6, -warm * 0.5)})`
+      ctx.fillRect(x, y, w, h)
+    }
+    if (mood.tint) {
+      ctx.globalCompositeOperation = 'soft-light'
+      ctx.globalAlpha = 0.35
+      ctx.fillStyle = mood.tint
+      ctx.fillRect(x, y, w, h)
+    }
+    ctx.restore()
+  }
+}
+
+/** The spot the Create panel points at: a soft dashed outline in front of you. */
+function drawCreateMarker(ctx, game) {
+  const m = game.createMarker
+  if (!m || m.mapId !== game.mapId) return
+  const p = 0.5 + 0.5 * Math.sin(game.time * 4)
+  ctx.save()
+  ctx.globalAlpha = 0.5 + 0.4 * p
+  ctx.strokeStyle = '#ffd36a'
+  ctx.lineWidth = 1
+  ctx.setLineDash([3, 2])
+  ctx.lineDashOffset = -game.time * 8
+  ctx.strokeRect(m.x * T + 0.5, m.y * T + 0.5, m.w * T - 1, m.h * T - 1)
+  ctx.restore()
 }
 
 function avatarFrame(a, time) {
@@ -192,6 +283,108 @@ function drawBall(ctx, game, b) {
   ctx.fillRect(x - 1 + roll - 1, y - 1, 2, 2)
   ctx.fillStyle = '#c8d0d8'
   ctx.fillRect(x - 2, y + 1, 5, 1)
+}
+
+const COURT_TEAM = ['#ff5a5a', '#4d8dff', '#2fb5b0', '#f0c43a']
+
+/** One thing a court game asked to draw, in world pixels (relative to the court's corner). */
+function drawCourtItem(ctx, game, cv, it) {
+  const ox = cv.ox
+  const oy = cv.oy
+  const num = (v, d = 0) => (Number.isFinite(v) ? v : d)
+  ctx.globalAlpha = Math.max(0, Math.min(1, num(it.alpha, 1)))
+  drawCourtShape(ctx, game, cv, it, ox, oy, num)
+  ctx.globalAlpha = 1
+}
+
+function drawCourtShape(ctx, game, cv, it, ox, oy, num) {
+  switch (it.t) {
+    case 'player': {
+      const p = cv.players[it.slot]
+      if (!p) return
+      const x = Math.round(ox + num(it.x))
+      const y = Math.round(oy + num(it.y))
+      const z = Math.max(0, Math.round(num(it.z)))
+      ctx.fillStyle = `rgba(24,18,40,${Math.max(0.12, 0.3 - z / 120)})`
+      ctx.beginPath()
+      ctx.ellipse(x, y + 2, Math.max(3, 6 - z / 10), 2.2, 0, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.save()
+      ctx.globalAlpha = p.me ? 0.95 : 0.7
+      ctx.strokeStyle = COURT_TEAM[p.team] || '#ffffff'
+      ctx.lineWidth = p.me ? 2 : 1.4
+      ctx.beginPath()
+      ctx.ellipse(x, y + 2, 7, 3, 0, 0, Math.PI * 2)
+      ctx.stroke()
+      ctx.restore()
+      const sheet = avatarSheet(game.images.characters, p.look)
+      const row = DIR_ROW[it.dir] ?? 0
+      let col = 0
+      if (it.pose === 'jump' || it.pose === 'reach') col = WAVE_COL + (it.pose === 'reach' ? 1 : 0)
+      else if (it.moving || it.pose === 'run') col = Math.floor(game.time * 9) % 4
+      ctx.drawImage(sheet, col * FRAME_W, (it.pose === 'jump' || it.pose === 'reach' ? DIR_ROW.down : row) * FRAME_H,
+        FRAME_W, FRAME_H, x - 8, y + 3 - z - FEET_Y, FRAME_W, FRAME_H)
+      break
+    }
+    case 'ball': {
+      const x = ox + num(it.x)
+      const y = oy + num(it.y)
+      const z = Math.max(0, num(it.z))
+      const r = Math.max(1, Math.min(8, num(it.r, 3)))
+      ctx.fillStyle = `rgba(20,24,20,${Math.max(0.12, 0.35 - z / 160)})`
+      ctx.beginPath()
+      ctx.ellipse(Math.round(x), Math.round(y) + 2, r + 1 + z / 30, 1.6 + z / 60, 0, 0, Math.PI * 2)
+      ctx.fill()
+      const bx = Math.round(x)
+      const by = Math.round(y - z)
+      ctx.fillStyle = '#1e1a24'
+      ctx.beginPath()
+      ctx.arc(bx, by, r + 1, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.fillStyle = typeof it.colour === 'string' ? it.colour : '#ffffff'
+      ctx.beginPath()
+      ctx.arc(bx, by, r, 0, Math.PI * 2)
+      ctx.fill()
+      if (typeof it.stripe === 'string') {
+        ctx.fillStyle = it.stripe
+        ctx.fillRect(bx - r + 1, by - 1, r * 2 - 1, 1)
+      }
+      ctx.fillStyle = 'rgba(255,255,255,0.8)'
+      ctx.fillRect(bx - Math.ceil(r / 2), by - Math.ceil(r / 2), 1, 1)
+      break
+    }
+    case 'shadow':
+      ctx.fillStyle = 'rgba(24,18,40,0.28)'
+      ctx.beginPath()
+      ctx.ellipse(Math.round(ox + num(it.x)), Math.round(oy + num(it.y)), Math.max(1, num(it.rx, 4)), Math.max(1, num(it.ry, 2)), 0, 0, Math.PI * 2)
+      ctx.fill()
+      break
+    case 'rect':
+      ctx.fillStyle = typeof it.colour === 'string' ? it.colour : '#ffffff'
+      ctx.fillRect(Math.round(ox + num(it.x)), Math.round(oy + num(it.y)), Math.round(num(it.w)), Math.round(num(it.h)))
+      break
+    case 'line':
+      ctx.strokeStyle = typeof it.colour === 'string' ? it.colour : '#ffffff'
+      ctx.lineWidth = Math.max(1, Math.min(4, num(it.width, 1)))
+      ctx.beginPath()
+      ctx.moveTo(ox + num(it.x1) + 0.5, oy + num(it.y1) + 0.5)
+      ctx.lineTo(ox + num(it.x2) + 0.5, oy + num(it.y2) + 0.5)
+      ctx.stroke()
+      break
+    case 'circle':
+      ctx.beginPath()
+      ctx.arc(ox + num(it.x), oy + num(it.y), Math.max(1, Math.min(64, num(it.r, 4))), 0, Math.PI * 2)
+      if (it.fill === false) {
+        ctx.strokeStyle = typeof it.colour === 'string' ? it.colour : '#ffffff'
+        ctx.lineWidth = 1
+        ctx.stroke()
+      } else {
+        ctx.fillStyle = typeof it.colour === 'string' ? it.colour : '#ffffff'
+        ctx.fill()
+      }
+      break
+    default:
+  }
 }
 
 function drawBubbles(ctx, game, avatars) {
@@ -439,6 +632,23 @@ function drawLabels(ctx, game, s, dpr, avatars, cam) {
     ctx.fillText(label.text, p.x, p.y + 0.5 * dpr)
   }
   drawStageBoard(ctx, game, toScreen, dpr)
+  const now = game.serverNow()
+  for (const site of game.sites || []) {
+    const text = siteLabel(site, now)
+    if (!text) continue
+    const [ax, ay, aw] = site.area || [site.x - 1, site.y - 1, 3]
+    const p = toScreen((ax + aw / 2) * T, ay * T - (site.area ? 52 : 26))
+    ctx.font = font(11 * dpr)
+    const tw = ctx.measureText(text).width + 16 * dpr
+    ctx.fillStyle = site.status === 'failed' ? 'rgba(90,40,48,0.85)' : 'rgba(42,34,20,0.88)'
+    roundRect(ctx, p.x - tw / 2, p.y - 10 * dpr, tw, 20 * dpr, 10 * dpr)
+    ctx.fill()
+    ctx.strokeStyle = '#ffd36a'
+    ctx.lineWidth = 1.2 * dpr
+    ctx.stroke()
+    ctx.fillStyle = '#fff3c4'
+    ctx.fillText(text, p.x, p.y + 0.5 * dpr)
+  }
   if (game.cutscene) return
   // Cat names, only for cats close to you (or being petted), small and quiet.
   const me = feetPx(game.me)
@@ -471,6 +681,36 @@ function drawLabels(ctx, game, s, dpr, avatars, cam) {
       ctx.fillText(p.name, head.x, head.y + 0.5 * dpr)
     }
   }
+  const cv = game.courtView
+  if (cv) {
+    for (const it of cv.items) {
+      if (it.t === 'player') {
+        const p = cv.players[it.slot]
+        if (!p) continue
+        const head = toScreen(cv.ox + (it.x || 0), cv.oy + (it.y || 0) - (it.z || 0) - 21)
+        ctx.font = font(10.5 * dpr)
+        const tw = ctx.measureText(p.name).width + 10 * dpr
+        const team = ['rgba(170,40,48,0.9)', 'rgba(40,80,170,0.9)', 'rgba(30,120,116,0.9)', 'rgba(150,120,30,0.9)'][p.team] || 'rgba(22,18,34,0.8)'
+        ctx.fillStyle = team
+        roundRect(ctx, head.x - tw / 2, head.y - 7.5 * dpr, tw, 15 * dpr, 7.5 * dpr)
+        ctx.fill()
+        if (p.me) {
+          ctx.strokeStyle = '#ffd36a'
+          ctx.lineWidth = 1.5 * dpr
+          ctx.stroke()
+        }
+        ctx.fillStyle = '#ffffff'
+        ctx.fillText(p.name, head.x, head.y + 0.5 * dpr)
+      } else if (it.t === 'text' && typeof it.text === 'string') {
+        const p = toScreen(cv.ox + (it.x || 0), cv.oy + (it.y || 0))
+        ctx.font = PIXEL_FONT(Math.max(8, Math.min(24, it.size || 10)) * 1.3 * dpr)
+        ctx.fillStyle = 'rgba(20,16,32,0.75)'
+        ctx.fillText(it.text.slice(0, 40), p.x + 1.5 * dpr, p.y + 1.5 * dpr)
+        ctx.fillStyle = typeof it.colour === 'string' ? it.colour : '#ffffff'
+        ctx.fillText(it.text.slice(0, 40), p.x, p.y)
+      }
+    }
+  }
   const sorted = [...avatars].sort((a, b) => a.fy - b.fy)
   for (const a of sorted) {
     const feet = feetPx(a)
@@ -482,19 +722,27 @@ function drawLabels(ctx, game, s, dpr, avatars, cam) {
     const padX = 6 * dpr
     // "Can't hear you" only means something where this town can make calls at all.
     const muted = a.muted && game.callsAvailable
-    const pillW = tw + padX * 2 + (muted ? 12 * dpr : 0)
+    // Office agents carry a coloured pill with a status dot (engine/office.js PILLS).
+    const dot = a.pill?.dot ? 10 * dpr : 0
+    const pillW = tw + padX * 2 + (muted ? 12 * dpr : 0) + dot
     const pillH = 17 * dpr
     const py = head.y - 6 * dpr
-    ctx.fillStyle = isMe ? 'rgba(46,118,255,0.88)' : 'rgba(22,18,34,0.72)'
+    ctx.fillStyle = isMe ? 'rgba(46,118,255,0.88)' : a.pill?.bg || 'rgba(22,18,34,0.72)'
     roundRect(ctx, head.x - pillW / 2, py - pillH / 2, pillW, pillH, pillH / 2)
     ctx.fill()
+    if (dot) {
+      ctx.fillStyle = a.pill.dot
+      ctx.beginPath()
+      ctx.arc(head.x - pillW / 2 + padX + 3 * dpr, py, 3.2 * dpr, 0, Math.PI * 2)
+      ctx.fill()
+    }
     if (a.speaking > 0.04) {
       ctx.strokeStyle = '#5cf08c'
       ctx.lineWidth = 2 * dpr
       ctx.stroke()
     }
     ctx.fillStyle = '#ffffff'
-    ctx.fillText(name, head.x - (muted ? 6 * dpr : 0), py + 0.5 * dpr)
+    ctx.fillText(name, head.x - (muted ? 6 * dpr : 0) + dot / 2, py + 0.5 * dpr)
     if (muted) {
       const mx = head.x + pillW / 2 - 9 * dpr
       ctx.strokeStyle = '#ff8a8a'
@@ -575,7 +823,15 @@ export function drawScene(game, ctx, w, h) {
   const tx = mapW <= vw ? mapW / 2 : Math.max(vw / 2, Math.min(mapW - vw / 2, focus.x))
   const ty = mapH <= vh ? mapH / 2 : Math.max(vh / 2, Math.min(mapH - vh / 2, focus.y - 8))
   const view = game.view
-  if (game.snapCamera || !Number.isFinite(view.x)) {
+  const glide = game.camGlide
+  if (glide) {
+    // A teleport across this map: ease from where the view was to where you land.
+    const k = Math.min(1, (game.time - glide.start) / glide.duration)
+    const e = k < 0.5 ? 4 * k * k * k : 1 - (2 - 2 * k) ** 3 / 2
+    view.x = glide.x + (tx - glide.x) * e
+    view.y = glide.y + (ty - glide.y) * e
+    if (k >= 1) game.camGlide = null
+  } else if (game.snapCamera || !Number.isFinite(view.x)) {
     view.x = tx
     view.y = ty
     game.snapCamera = false
@@ -603,11 +859,22 @@ export function drawScene(game, ctx, w, h) {
   g.imageSmoothingEnabled = false
   g.setTransform(n, 0, 0, n, -ox, -oy)
   if (ground) g.drawImage(ground, 0, 0)
+  for (const u of map.underlay || []) {
+    if (u.frames) drawPiece(g, u, game.time)
+    else if (u.img.complete && u.img.naturalWidth) g.drawImage(u.img, u.x, u.y)
+  }
+  const cv = game.courtView
+  if (cv) for (const it of cv.items) if (it.layer === 'ground' && it.t !== 'text') drawCourtItem(g, game, cv, it)
 
-  // Footballers in a match are drawn by the match, so their town avatars step aside.
+  // Footballers in a match are drawn by the match, so their town avatars step aside; so does
+  // anyone a teleport effect is drawing (or who is between its two beams).
   const hidden = game.hiddenAvatars
-  const avatars = hidden?.has(me.id) ? [] : [me]
-  for (const a of game.others.values()) if (a.mapId === game.mapId && !hidden?.has(a.id)) avatars.push(a)
+  const avatars = hidden?.has(me.id) || beamHidden(game, me) ? [] : [me]
+  for (const a of game.others.values()) {
+    if (a.mapId === game.mapId && !hidden?.has(a.id) && !beamHidden(game, a)) avatars.push(a)
+  }
+  // The Agent Office's crew (engine/office.js) are drawn like people.
+  for (const a of game.npcs || []) if (a.mapId === game.mapId) avatars.push(a)
 
   drawTv(g, game)
   drawSpotlights(g, game, avatars)
@@ -623,19 +890,42 @@ export function drawScene(game, ctx, w, h) {
     for (const p of fb.players) actors.push({ z: p.y + 3, draw: () => drawFootballer(g, game, p) })
     actors.push({ z: fb.ball.y + 0.2, draw: () => drawBall(g, game, fb.ball) })
   }
+  for (const e of game.effects) {
+    if (e.mapId === game.mapId && e.kind?.startsWith('beam')) actors.push({ z: e.y + 0.6, draw: () => drawBeam(g, game, e) })
+  }
+  if (cv) {
+    for (const it of cv.items) {
+      if (it.layer === 'ground' || it.t === 'text') continue
+      const y = Number.isFinite(it.y) ? it.y : Number.isFinite(it.y2) ? Math.max(it.y1, it.y2) : 0
+      actors.push({ z: cv.oy + y + (it.t === 'player' ? 3 : 0.3), draw: () => drawCourtItem(g, game, cv, it) })
+    }
+  }
   if (map.mobius) actors.push({ z: map.mobius.z, draw: () => drawMobius(g, game, map.mobius) })
   for (const f of map.fires || []) actors.push({ z: f.z, draw: () => drawFire(g, game, f) })
   for (const d of map.roomDoors || []) actors.push({ z: (d.y + 1) * T - 1, draw: () => drawDoor(g, game, d) })
   actors.sort((p, q) => p.z - q.z)
   let ai = 0
   const atlas = game.images.atlas
-  for (const [name, x, y, z] of map.ents) {
-    while (ai < actors.length && actors[ai].z <= z) actors[ai++].draw()
-    if (x > viewR || y > viewB || z < viewT || x + spriteWidth(name) < viewL) continue
-    drawSprite(g, atlas, name, x, y, game.time)
+  for (const e of map.ents) {
+    if (Array.isArray(e)) {
+      const [name, x, y, z] = e
+      while (ai < actors.length && actors[ai].z <= z) actors[ai++].draw()
+      if (x > viewR || y > viewB || z < viewT || x + spriteWidth(name) < viewL) continue
+      drawSprite(g, atlas, name, x, y, game.time)
+    } else {
+      while (ai < actors.length && actors[ai].z <= e.z) actors[ai++].draw()
+      if (e.x > viewR || e.y > viewB || e.z < viewT || e.x + (e.frames[0]?.naturalWidth || 256) < viewL) continue
+      drawPiece(g, e, game.time)
+    }
   }
   while (ai < actors.length) actors[ai++].draw()
   drawCutsceneWorld(g, game)
+  for (const o of map.overlay || []) drawPiece(g, o, game.time)
+  drawGlows(g, game)
+  for (const site of game.sites || []) drawSite(g, site, game.time)
+  drawCreateMarker(g, game)
+  game.fx.drawWorld(g, game.time)
+  drawMoods(g, game, mapW, mapH)
 
   ctx.setTransform(1, 0, 0, 1, 0, 0)
   if (!direct) {
@@ -643,8 +933,10 @@ export function drawScene(game, ctx, w, h) {
     ctx.imageSmoothingQuality = 'high'
     ctx.drawImage(buffer, 0, 0, (buffer.width * s) / n, (buffer.height * s) / n)
   }
+  game.fx.drawLights(ctx, w, h, game.time)
   drawLabels(ctx, game, s, dpr, avatars, cam)
   drawCutsceneScreen(ctx, game, w, h, dpr, s, cam)
+  game.fx.drawBanner(ctx, w, h, dpr, game.time)
 
   if (game.fade > 0) {
     ctx.fillStyle = `rgba(10,8,16,${game.fade})`

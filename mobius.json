@@ -2,13 +2,14 @@
   "id": "mobius-town",
   "package_id": "e62b0c31-8b49-41f3-8270-4b9b8ad338b6",
   "name": "Möbius Town",
-  "version": "0.4.3",
-  "description": "A shared pixel-art town where everyone is a Möbian: walk up to others to talk, gather in conversation bubbles and lockable rooms, take the stage, and play chess, Connect Four, football and quick party games.",
+  "version": "0.5.0",
+  "description": "A shared pixel-art town where everyone is a Möbian: walk up to others to talk, play chess, football and party games, change the town itself by asking: say what should exist and a builder agent builds it live for everyone, teleport to friends, and meet your own agents in the Agent Office.",
   "entry": "index.jsx",
   "icon": "icon.png",
   "offline_capable": false,
   "permissions": {
-    "identity_manage": true
+    "identity_manage": true,
+    "chat_log_access": "summary"
   },
   "service": {
     "id": "mobius-town",
@@ -46,6 +47,15 @@
     "engine/cutscenes.js",
     "engine/cats.js",
     "engine/match.js",
+    "engine/teleport.js",
+    "engine/beam.js",
+    "engine/minimap.js",
+    "engine/creations.js",
+    "engine/effects.js",
+    "engine/building.js",
+    "engine/builderPrompt.js",
+    "engine/courts.js",
+    "games/court-sdk.js",
     "net/hub.js",
     "net/mesh.js",
     "av/proximity.js",
@@ -67,6 +77,7 @@
     "ui/Events.jsx",
     "ui/Football.jsx",
     "ui/StageScreen.jsx",
+    "ui/Minimap.jsx",
     "service.py",
     "hub.py",
     "world_meta.py",
@@ -74,7 +85,19 @@
     "connect4_rules.py",
     "party.py",
     "ui/Party.jsx",
-    "ui/partyCss.js"
+    "ui/partyCss.js",
+    "agentOffice.js",
+    "engine/office.js",
+    "net/agents.js",
+    "ui/Office.jsx",
+    "ui/officeCss.js",
+    "ui/Create.jsx",
+    "ui/Court.jsx",
+    "creations.py",
+    "mobius-town-builder.md"
+  ],
+  "skills": [
+    "mobius-town-builder.md"
   ],
   "static_assets": {
     "audio/chime.mp3": "audio/chime.mp3",
@@ -99,33 +122,33 @@
     "audio/win.mp3": "audio/win.mp3"
   },
   "store": {
-    "tagline": "A shared pixel-art town for Möbians: walk around together, chat, play chess or football, pet the cats.",
-    "description": "Möbius Town is one shared pixel-art town for everyone who installs it, and everyone in it is a Möbian. Pick a male or female character in your own colours and walk around with all the other Möbians.\n\nGet together:\n- Chat with the Möbians near you or with the whole town, wave, dance to a song you pick, and gather in conversation bubbles.\n- Step into a meeting room and lock the door, or take the auditorium stage; the calendar schedules lightning-talk nights and game nights.\n- Put on a YouTube video in the cinema and everyone in the room watches together.\n\nPlay together:\n- Walk onto the Football Ground for a 2 v 2 match. Bots fill any empty place, at easy, medium or hard.\n- Take a seat in the Chess Club or the Game Den for chess or Connect Four, against another Möbian or a bot.\n- Challenge anyone to a party of three quick games: Quick Draw, Rock-Paper-Scissors and a Speed Sprint of mental sums.\n\nAnd the small things: pet the cats that wander around town, sit on any chair, sofa or bench, toss a coin into the fountain, and admire the giant rotating Möbius strip in the Möbius Garden, with town music and crackling fireplaces along the way.\n\nEvery Möbian joins the same town, which runs on its publisher's Möbius. Voice, video and screen sharing with the Möbians near you are on the way: they need a Möbius update that is under review, and the town will add them once it ships. Art, fonts, music and sounds are CC0 (see CREDITS.md).",
+    "tagline": "A shared pixel-art town for Möbians: hang out, play games, and build whatever you ask for, live.",
+    "description": "Möbius Town is one shared pixel-art town for everyone who installs it, and everyone in it is a Möbian. Pick a male or female character in your own colours and walk around with all the other Möbians.\n\nGet together:\n- Chat with the Möbians near you or with the whole town, wave, dance to a song you pick, and gather in conversation bubbles.\n- Step into a meeting room and lock the door, or take the auditorium stage; the calendar schedules lightning-talk nights and game nights.\n- Put on a YouTube video in the cinema and everyone in the room watches together.\n\nPlay together:\n- Walk onto the Football Ground for a 2 v 2 match. Bots fill any empty place, at easy, medium or hard.\n- Take a seat in the Chess Club or the Game Den for chess or Connect Four, against another Möbian or a bot.\n- Challenge anyone to a party of three quick games: Quick Draw, Rock-Paper-Scissors and a Speed Sprint of mental sums.\n\nBuild it by asking:\n- Walk to a spot, press Create and say what you would like: a volleyball court we can all play on, a garden with a bench, a lighter café with a courtyard, a birthday surprise that goes off when your friend walks in. A builder agent works on it with your own Möbius while everyone watches the construction site, and it appears for every Möbian, live.\n- Courts come with their game: walk on, press X, and play with others or bots. Volleyball is ready-made; builders can write new games, which run sealed off from everyone's account.\n- You can change or undo what you built; the town's keeper can pause building.\n\nFind each other:\n- A minimap in the corner shows where you are and who is around. Open the town map (N) to see every Möbian, out in town or inside a building, and teleport to anyone in a column of light.\n\nYour Agent Office:\n- Walk into the Agent Office to meet your own Möbius agents at their desks: the busiest type away, quieter ones take a coffee break. Walk up to one to see what it was asked and its latest message, or open its chat with a new prompt ready to send.\n- Everyone gets an office of their own: nobody else sees your agents, and their details never leave your Möbius. The office reads your chat summaries (titles, short excerpts and when each chat was last active), so Möbius asks you to allow that when you install.\n\nAnd the small things: pet the cats that wander around town, sit on any chair, sofa or bench, toss a coin into the fountain, and admire the giant rotating Möbius strip in the Möbius Garden, with town music and crackling fireplaces along the way.\n\nEvery Möbian joins the same town, which runs on its publisher's Möbius. Voice, video and screen sharing with the Möbians near you are on the way: they need a Möbius update that is under review, and the town will add them once it ships. Art, fonts, music and sounds are CC0 (see CREDITS.md).",
     "screenshots": [
+      {
+        "src": "static/store/mobius-town-build.png",
+        "alt": "A beach volleyball court a Möbian asked for, built live in town: sand, a net, umbrellas and benches, with four Möbians on the court and the prompt to play.",
+        "label": "Ask for something and a builder makes it, live."
+      },
+      {
+        "src": "static/store/mobius-town-office.png",
+        "alt": "The Agent Office: agents at desks with glowing monitors, name tags saying what each is working on, a typing bubble, and one agent at the coffee counter.",
+        "label": "Meet your own Möbius agents in your Agent Office."
+      },
       {
         "src": "static/store/mobius-town-square.png",
         "alt": "The town square: Möbians chatting in a conversation bubble, others on benches, one dancing with music notes.",
         "label": "One shared town for all Möbians."
       },
       {
+        "src": "static/store/mobius-town-map.png",
+        "alt": "The town map: every Möbian as a dot outdoors or a count on their building, with a Teleport button for each in the list beside it.",
+        "label": "See where everyone is and teleport to them."
+      },
+      {
         "src": "static/store/mobius-town-football.png",
         "alt": "The Football Ground: a 2 v 2 match against bots at the centre circle, with Möbians watching from benches and a cat napping beside the pitch.",
         "label": "Play 2 v 2 football; bots fill empty places."
-      },
-      {
-        "src": "static/store/mobius-town-party.png",
-        "alt": "A party challenge between two players: Rock-Paper-Scissors reveal, rock beats scissors, with the score and the three games of the party.",
-        "label": "Challenge anyone to a party of three quick games."
-      },
-      {
-        "src": "static/store/mobius-town-chess.png",
-        "alt": "A chess game against a medium bot: smooth pieces on the board, the bot shown as a little computer character and the player as their avatar.",
-        "label": "Chess or Connect Four with friends or bots."
-      },
-      {
-        "src": "static/store/mobius-town-cats.png",
-        "alt": "Petting Biscuit, a cream cat, beside the Möbius Garden: the cat sits up happily with pink hearts.",
-        "label": "Pet the cats that wander around town."
       }
     ]
   }

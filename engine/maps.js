@@ -1,9 +1,28 @@
-// Map data access and path finding. Pure functions over world.gen.js data.
+// Map data access and path finding. Pure functions over world.gen.js data, with the creations
+// Möbians built laid over each map (engine/creations.js).
 import { WORLD } from './world.gen.js'
+import { applyCreations } from './creations.js'
 
 const parsed = new Map()
+const layered = new Map() // map id -> { list, map }
 
+/** The map as it is now: the base map with its creations, if any. */
 export function getMap(id) {
+  const base = baseMap(id)
+  if (!base) return null
+  const layer = layered.get(id)
+  if (!layer || !layer.list.length) return base
+  if (!layer.map) layer.map = applyCreations(base, layer.list)
+  return layer.map
+}
+
+/** Replace the creations on a map (oldest first): [{ id, rev, body, masked }]. */
+export function setCreations(id, list) {
+  layered.set(id, { list, map: null })
+}
+
+/** The map as it was built, without creations. */
+export function baseMap(id) {
   if (parsed.has(id)) return parsed.get(id)
   const raw = WORLD.maps[id]
   if (!raw) return null
@@ -11,6 +30,9 @@ export function getMap(id) {
   for (let i = 0; i < solid.length; i++) solid[i] = raw.solid.charCodeAt(i) - 48
   const roomIdx = new Uint8Array(raw.w * raw.h)
   for (let i = 0; i < roomIdx.length; i++) roomIdx[i] = raw.roomGrid.charCodeAt(i) - 97
+  // Tiles builders must keep clear (doors, game tables, the stage...), from build_world.py.
+  const keepClear = new Uint8Array(raw.w * raw.h)
+  if (raw.protected) for (let i = 0; i < keepClear.length; i++) keepClear[i] = raw.protected.charCodeAt(i) === 49 ? 1 : 0
   const doors = new Map(raw.doors.map((d) => [d.y * raw.w + d.x, d]))
   const ents = [...raw.ents].sort((a, b) => a[3] - b[3])
   const objects = raw.objects.map((o) => ({ ...o }))
@@ -27,7 +49,7 @@ export function getMap(id) {
   const seatIndex = new Map()
   for (const o of objects) if (o.kind === 'seat') seatIndex.set(o.y * raw.w + o.x, o)
   const map = {
-    ...raw, solid, roomIdx, doorIndex: doors, ents, objects, useIndex, seatIndex,
+    ...raw, solid, roomIdx, keepClear, doorIndex: doors, ents, objects, useIndex, seatIndex,
     fires: objects.filter((o) => o.kind === 'fire'),
     roomDoors: objects.filter((o) => o.kind === 'door'),
     mobius: objects.find((o) => o.kind === 'mobius') || null,
@@ -38,6 +60,15 @@ export function getMap(id) {
 }
 
 export const MAP_IDS = Object.keys(WORLD.maps)
+
+/**
+ * A private map (an office, say) is someone's own place: the people on it are never drawn on
+ * another map's minimap, the town map shows them at the building's door, and a teleport to them
+ * stops outside. Read from the raw world so a flag set at runtime (tests) counts too.
+ */
+export function isPrivateMap(id) {
+  return WORLD.maps[id]?.private === true
+}
 
 export function inBounds(map, x, y) {
   return x >= 0 && y >= 0 && x < map.w && y < map.h

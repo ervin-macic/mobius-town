@@ -1015,3 +1015,173 @@ def floodlight():
       rect(img, bx, by, 3, 2, (255, 246, 200, 255))
       put(img, bx, by, (255, 255, 236, 255))
   return outline(img, OUT)
+
+
+# --- The Agent Office ---------------------------------------------------------------------
+# A modern office where each visitor's own Möbius agents work. The building stands in the
+# west meadow; its interior (build_office in build_world.py) is private to each visitor.
+
+OFFICE_WALL = (226, 222, 234, 255)
+OFFICE_TRIM = (110, 86, 146, 255)
+OFFICE_FRAME = (58, 60, 82, 255)
+GLASS = (96, 156, 214, 255)
+GLASS_LIGHT = (176, 218, 248, 255)
+GLASS_DARK = (62, 104, 160, 255)
+SIGN_GOLD = (255, 214, 112, 255)
+
+
+def glass_pane(img, x, y, w, h):
+  """One window pane: dark frame, blue glass, a bright diagonal glint, a darker sill line."""
+  rect(img, x, y, w, h, OFFICE_FRAME)
+  rect(img, x + 1, y + 1, w - 2, h - 2, GLASS)
+  hline(img, x + 1, y + h - 2, w - 2, GLASS_DARK)
+  for i in range(min(w, h) - 3):
+    if 0 < i < w - 2:
+      put(img, x + 1 + i, y + 1 + (min(w, h) - 4 - i), GLASS_LIGHT if i % 3 else shade(GLASS_LIGHT, 1.05))
+  put(img, x + 2, y + 2, GLASS_LIGHT)
+
+
+def office_building(tiles_w=6, tiles_h=5):
+  """A two-storey office: flat roof with solar panels, glass ribbon windows, a lit sign and
+  glass double doors in the middle two tiles of the bottom row.
+
+  The image is tiles_w tiles wide and 8 px taller than its footprint, so the roof edge rises
+  above the blocked tiles the way the houses' roofs do.
+  """
+  rng = noise_rng(41)
+  w, h = tiles_w * T, tiles_h * T + 8
+  img = new(w, h)
+  roof_h = 22
+  # Flat roof seen from above: gravel, a parapet lip, an air-conditioning unit, solar panels.
+  roof = (102, 94, 118, 255)
+  rect(img, 0, 0, w, roof_h, roof)
+  for _ in range(90):
+    put(img, rng.randint(2, w - 3), rng.randint(2, roof_h - 3), shade(roof, rng.choice((0.9, 1.1))))
+  hline(img, 0, 0, w, (150, 142, 168, 255))
+  vline(img, 0, 0, roof_h, (150, 142, 168, 255))
+  vline(img, w - 1, 0, roof_h, (78, 70, 94, 255))
+  hline(img, 0, roof_h - 1, w, (72, 64, 88, 255))
+  rect(img, 8, 5, 16, 11, (184, 188, 200, 255))
+  frame(img, 8, 5, 16, 11, (110, 114, 130, 255))
+  fan = disc_mask(16, 9, 8, 4.5, 3.5, 3.5)
+  fill_mask(img, {(x + 8, y + 6) for (x, y) in fan}, (70, 74, 90, 255))
+  for (dx, dy) in ((0, -2), (2, 0), (0, 2), (-2, 0)):
+    put(img, 16 + dx, 10 + dy, (200, 204, 214, 255))
+  for col in range(4):
+    for row in range(2):
+      px, py = 34 + col * 14, 4 + row * 8
+      rect(img, px, py, 13, 7, (44, 62, 122, 255))
+      hline(img, px, py, 13, (110, 140, 210, 255))
+      vline(img, px + 6, py + 1, 6, (70, 92, 160, 255))
+      put(img, px + 2, py + 2, (150, 180, 240, 255))
+  # Facade: pale panels, a purple cornice, two floors of glass.
+  rect(img, 0, roof_h, w, h - roof_h, OFFICE_WALL)
+  for x in range(15, w, 16):
+    vline(img, x, roof_h + 4, h - roof_h - 6, shade(OFFICE_WALL, 0.93))
+  rect(img, 0, roof_h, w, 4, OFFICE_TRIM)
+  hline(img, 0, roof_h, w, shade(OFFICE_TRIM, 1.3))
+  for i in range(6):
+    glass_pane(img, 4 + i * 15, 31, 13, 14)
+  rect(img, 0, 49, w, 2, shade(OFFICE_WALL, 0.82))
+  # The lit sign above the doors.
+  text = 'AGENT OFFICE'
+  sign_w = 54
+  sx = (w - sign_w) // 2
+  rect(img, sx, 53, sign_w, 9, (46, 34, 70, 255))
+  frame(img, sx, 53, sign_w, 9, OFFICE_TRIM)
+  text_w = draw_text_bitmap(new(80, 8), 0, 0, text, GLYPHS, SIGN_GOLD) - 1
+  draw_text_bitmap(img, sx + (sign_w - text_w) // 2, 55, text, GLYPHS, SIGN_GOLD)
+  # Ground-floor windows either side of the doors.
+  glass_pane(img, 4, 64, 22, 16)
+  glass_pane(img, w - 26, 64, 22, 16)
+  # Glass double doors: the middle two tiles of the bottom row.
+  dx0 = (tiles_w // 2 - 1) * T
+  rect(img, dx0 + 2, 63, 2 * T - 4, h - 63, OFFICE_FRAME)
+  for leaf in range(2):
+    lx = dx0 + 4 + leaf * (T - 2)
+    rect(img, lx, 65, T - 4, h - 67, GLASS)
+    vline(img, lx + 2, 66, h - 69, GLASS_LIGHT)
+    hline(img, lx, h - 3, T - 4, GLASS_DARK)
+    put(img, lx + (T - 6 if leaf == 0 else 1), 75, SIGN_GOLD)
+    put(img, lx + (T - 6 if leaf == 0 else 1), 76, SIGN_GOLD)
+  # Plinth and two potted shrubs by the doors.
+  rect(img, 0, h - 3, w, 3, (150, 146, 160, 255))
+  for bx in (dx0 - 9, dx0 + 2 * T + 1):
+    rect(img, bx + 1, h - 8, 6, 6, (196, 112, 72, 255))
+    fill_mask(img, {(x + bx, y + h - 15) for (x, y) in disc_mask(8, 8, 4, 4, 4, 4)}, LEAF)
+    put(img, bx + 3, h - 13, LEAF_LIGHT)
+    put(img, bx + 5, h - 11, LEAF_MID)
+  return outline(img, OUT)
+
+
+DESK_TOP = (234, 230, 222, 255)
+DESK_EDGE = (196, 190, 180, 255)
+CODE_COLOURS = ((120, 226, 150, 255), (140, 186, 255, 255), (244, 166, 214, 255), (250, 212, 124, 255))
+
+
+def office_desk(seed=0):
+  """A two-tile desk for someone facing north: their monitor faces us, so the screen glows.
+
+  `seed` varies the code on the screen and the personal touch (mug, plant, lamp or papers).
+  """
+  rng = noise_rng(900 + seed)
+  w, h = 2 * T, 27
+  img = new(w, h)
+  # Monitor with a few lines of code.
+  rect(img, 6, 0, 20, 13, (44, 46, 62, 255))
+  rect(img, 7, 1, 18, 10, (20, 28, 46, 255))
+  for i, y in enumerate((2, 4, 6, 8)):
+    x0 = 8 + rng.randint(0, 3) + (2 if i in (1, 2) else 0)
+    length = rng.randint(4, 13)
+    hline(img, x0, y, max(2, min(length, 24 - x0)), CODE_COLOURS[(i + seed) % len(CODE_COLOURS)])
+  put(img, 23, 9, (90, 230, 120, 255))
+  rect(img, 15, 13, 2, 2, (70, 72, 90, 255))
+  # Desk top, keyboard and front panel.
+  rect(img, 0, 15, w, 5, DESK_TOP)
+  hline(img, 0, 15, w, WHITE)
+  rect(img, 0, 20, w, 2, DESK_EDGE)
+  rect(img, 10, 17, 12, 2, (72, 74, 92, 255))
+  hline(img, 11, 17, 10, (110, 112, 132, 255))
+  rect(img, 2, 22, 3, 5, (88, 90, 108, 255))
+  rect(img, w - 5, 22, 3, 5, (88, 90, 108, 255))
+  rect(img, 5, 22, w - 10, 3, shade(DESK_EDGE, 0.82))
+  touch = seed % 4
+  if touch == 0:  # mug
+    rect(img, 26, 15, 4, 4, WHITE)
+    put(img, 30, 16, WHITE)
+    put(img, 27, 15, (120, 72, 50, 255))
+  elif touch == 1:  # little plant
+    rect(img, 2, 16, 4, 3, (196, 112, 72, 255))
+    fill_mask(img, {(x + 1, y + 10) for (x, y) in disc_mask(6, 6, 3, 3, 3, 3)}, LEAF)
+    put(img, 3, 12, LEAF_LIGHT)
+  elif touch == 2:  # desk lamp
+    vline(img, 28, 9, 7, (70, 72, 90, 255))
+    rect(img, 25, 8, 5, 2, (240, 200, 90, 255))
+    put(img, 26, 10, (255, 244, 190, 255))
+  else:  # papers
+    rect(img, 1, 16, 7, 4, WHITE)
+    hline(img, 2, 17, 5, (170, 170, 190, 255))
+    rect(img, 24, 16, 6, 3, (255, 236, 140, 255))
+  return outline(img, OUT)
+
+
+def directory_board():
+  """A standing screen by the office door that lists everyone working here."""
+  w, h = 30, 30
+  img = new(w, h)
+  rect(img, 13, 20, 4, 8, (70, 72, 90, 255))
+  rect(img, 8, 27, 14, 2, (70, 72, 90, 255))
+  rect(img, 1, 1, w - 2, 20, (44, 46, 62, 255))
+  rect(img, 3, 3, w - 6, 16, (24, 22, 44, 255))
+  hline(img, 5, 5, 12, SIGN_GOLD)
+  dots = ((90, 230, 120, 255), (255, 196, 90, 255), (150, 150, 170, 255))
+  for i, y in enumerate((9, 12, 15)):
+    put(img, 5, y, dots[i])
+    hline(img, 7, y, 8 + (i * 5) % 9, (200, 204, 230, 255))
+  return outline(img, OUT)
+
+
+ICON_BITMAPS['agents'] = [
+  # A friendly robot head for the Agent Office sign.
+  '....##....', '.########.', '.#......#.', '.#.#..#.#.', '.#......#.', '.#.####.#.', '.########.',
+  '...#..#...', '.########.']

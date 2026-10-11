@@ -41,6 +41,8 @@ SERVICE_PATH = '/api/app-services/mobius-town'
 PROOF_SECONDS = 120
 IDENTITY_CACHE_SECONDS = 300
 MAX_PEER_RESPONSE = 512 * 1024
+# Creation bodies carry their pictures: towns and builders fetch them in batches up to this size.
+MAX_BUILD_RESPONSE = 4 * 1024 * 1024
 CID = re.compile(r'^[A-Za-z0-9_-]{8,64}$')
 
 
@@ -135,7 +137,7 @@ def public_host(name: str) -> str:
   return name
 
 
-async def peer(host: str, path: str, body=None):
+async def peer(host: str, path: str, body=None, limit: int = MAX_PEER_RESPONSE):
   url = 'https://' + public_host(host) + SERVICE_PATH + '/' + path
   try:
     async with httpx.AsyncClient(timeout=12, follow_redirects=False, trust_env=False) as client:
@@ -143,7 +145,7 @@ async def peer(host: str, path: str, body=None):
         raw = b''
         async for chunk in response.aiter_bytes():
           raw += chunk
-          if len(raw) > MAX_PEER_RESPONSE:
+          if len(raw) > limit:
             raise Problem('The town sent too much data.', 502)
     data = json.loads(raw) if raw else {}
   except Problem:
@@ -191,14 +193,26 @@ async def remote_session(ctx: Ctx, cid: str, fresh: bool = False) -> dict:
 
 
 async def forward(ctx: Ctx, cid: str, path: str, body: dict):
+  limit = MAX_BUILD_RESPONSE if path in ('world', 'build') else MAX_PEER_RESPONSE
   session = await remote_session(ctx, cid)
   try:
-    return await peer(HUB_HOST, 's/' + path, {**body, 'session': session['token']})
+    return await peer(HUB_HOST, 's/' + path, {**body, 'session': session['token']}, limit)
   except Problem as exc:
     if exc.status != 401:
       raise
   session = await remote_session(ctx, cid, fresh=True)
-  return await peer(HUB_HOST, 's/' + path, {**body, 'session': session['token']})
+  return await peer(HUB_HOST, 's/' + path, {**body, 'session': session['token']}, limit)
+
+
+def builder_cid(ctx: Ctx) -> str:
+  """A stable client id for this installation's builder agents (they act for its owner, not a device)."""
+  with local_db(ctx) as db:
+    row = db.execute("SELECT v FROM cache WHERE k = 'builder_cid'").fetchone()
+    if row:
+      return json.loads(row['v'])
+    cid = 'builder-' + secrets.token_hex(8)
+    db.execute("INSERT OR REPLACE INTO cache VALUES ('builder_cid', ?, ?)", (json.dumps(cid), time.time()))
+    return cid
 
 
 async def own_request(ctx: Ctx, req: dict):
@@ -210,6 +224,13 @@ async def own_request(ctx: Ctx, req: dict):
     return {'me': me if me['handle'] else None, 'hub': HUB_HOST, 'isHub': ctx.is_hub,
             'problem': None if me['handle'] and not me['unavailable'] else
             'Connect a Möbius account with an @handle (in Möbius · You) to meet the Möbians of Möbius Town.'}
+  if path == 'build':
+    # A builder agent working for this installation's owner (forge/town.py). No device id needed.
+    me = await require_handle(ctx)
+    if not ctx.is_hub:
+      return await forward(ctx, builder_cid(ctx), 'build', {k: v for k, v in body.items() if k != 'cid'})
+    with hub_db(ctx) as db:
+      return hub.build(db, me['handle'], me['name'] or me['handle'], me['handle'], body)
   cid = body_cid(body)
   if path == 'join':
     me = await require_handle(ctx)
@@ -219,16 +240,18 @@ async def own_request(ctx: Ctx, req: dict):
       return {'pid': pid, 'handle': me['handle']}
     session = await remote_session(ctx, cid, fresh=True)
     return {'pid': session['pid'], 'handle': session['handle']}
-  if path in ('sync', 'act', 'leave'):
+  if path in ('sync', 'act', 'leave', 'world'):
     if not ctx.is_hub:
       return await forward(ctx, cid, path, body)
     me = await require_handle(ctx)
     with hub_db(ctx) as db:
+      if path == 'world':
+        return hub.read(db, me['handle'], me['name'] or me['handle'], body)
       pid = hub.local_pid(db, me['handle'], cid)
       if path == 'sync':
         return hub.sync(db, pid, me['handle'], HUB_HOST, cid, body)
       if path == 'act':
-        return hub.act(db, pid, body)
+        return hub.act(db, pid, body, keeper=me['handle'])
       return hub.leave(db, pid)
   raise Problem('Not found.', 404)
 
@@ -266,14 +289,19 @@ async def public_request(ctx: Ctx, req: dict):
     with hub_db(ctx) as db:
       token, pid = hub.open_session(db, handle, sender, cid)
     return {'token': token, 'pid': pid}
-  if path in ('s/sync', 's/act', 's/leave'):
+  if path in ('s/sync', 's/act', 's/leave', 's/world', 's/build'):
+    keeper = (await identity(ctx))['handle'] if path in ('s/act', 's/build') else None
     with hub_db(ctx) as db:
       session = hub.session_for(db, body.get('session'))
       pid = session['pid']
       if path == 's/sync':
         return hub.sync(db, pid, session['handle'], session['host'], session['cid'], body)
       if path == 's/act':
-        return hub.act(db, pid, body)
+        return hub.act(db, pid, body, keeper=keeper)
+      if path == 's/world':
+        return hub.read(db, session['handle'], hub.cr.name_of(db, session['handle']), body)
+      if path == 's/build':
+        return hub.build(db, session['handle'], hub.cr.name_of(db, session['handle']), keeper, body)
       return hub.leave(db, pid)
   raise Problem('Not found.', 404)
 

@@ -283,6 +283,10 @@ class Map:
     # Entity index -> the tiles it owns (its solid tiles, or the seat tiles of a chair or bench),
     # so a builder hiding a piece of furniture frees exactly those tiles.
     self.ent_tiles = {}
+    # Part index -> the entity it belongs to: a bench's or sofa's seat is drawn as its own piece
+    # under the backrest (so people sit between them) but answers to the backrest's key, so hiding
+    # the furniture takes the whole of it.
+    self.ent_part_of = {}
     # Pictures painted on walls (windows, paintings, the menu, the cinema screen): [sprite, x, y].
     # A builder repainting a wall keeps them unless it asks to remove them.
     self.decor = []
@@ -308,6 +312,12 @@ class Map:
       z = y + img.height
     self.ents.append([sid, int(x), int(y), int(z)])
     return len(self.ents) - 1
+
+  def part(self, owner, sid, x, y, z):
+    """Another piece of entity `owner`'s furniture: drawn on its own, hidden with it."""
+    idx = self.ent(sid, x, y, z)
+    self.ent_part_of[idx] = owner
+    return idx
 
   def own(self, idx, x, y, w=1, h=1):
     """Block tiles that belong to entity `idx`."""
@@ -391,15 +401,29 @@ class Map:
     self.protected = keep
     self.ent_protected = {i for i, e in enumerate(self.ents)
                           if e[0] in landmarks or self.ent_tiles.get(i, set()) & keep}
+    # A part shares its furniture's fate.
+    self.ent_protected = {i for i in self.ent_protected if i not in self.ent_part_of}
+    self.ent_protected |= {i for i, owner in self.ent_part_of.items() if owner in self.ent_protected}
 
   def ent_keys(self):
-    """Stable names for entities, `sprite@x,y`, so a creation can hide one."""
+    """Stable names for entities, `sprite@x,y`, so a creation can hide one; parts share their furniture's."""
     keys, seen = [], {}
-    for sid, x, y, _z in self.ents:
+    for i, (sid, x, y, _z) in enumerate(self.ents):
+      if i in self.ent_part_of:
+        keys.append(None)
+        continue
       key = f'{sid}@{x},{y}'
       seen[key] = seen.get(key, 0) + 1
       keys.append(key if seen[key] == 1 else f'{key}#{seen[key]}')
-    return keys
+    return [keys[self.ent_part_of[i]] if i in self.ent_part_of else key for i, key in enumerate(keys)]
+
+  def furniture_tiles(self):
+    """Furniture a builder may hide: key -> the tiles it owns (all of its parts together)."""
+    out = {}
+    for i, key in enumerate(self.ent_keys()):
+      if i not in self.ent_protected:
+        out.setdefault(key, set()).update(self.ent_tiles.get(i, ()))
+    return {key: sorted([list(t) for t in tiles]) for key, tiles in out.items()}
 
   def export(self, previews=None):
     self.protect()
@@ -905,8 +929,8 @@ def build_cinema():
   rows = ((6, ((2, 4), (12, 4))), (9, ((2, 4), (12, 4))))
   for row_y, blocks in rows:
     for (x0, n) in blocks:
-      m.paint(SPRITES[f'sofa{n}_seat'][0], x0 * T, row_y * T)
       idx = m.ent(f'sofa{n}_back', x0 * T - 2, row_y * T + 9, row_y * T + 16)
+      m.part(idx, f'sofa{n}_seat', x0 * T, row_y * T, row_y * T)
       for i in range(n):
         m.seat(x0 + i, row_y, 'up')
       m.attach(idx, [(x0 + i, row_y) for i in range(n)])
@@ -994,8 +1018,8 @@ def build_hall():
   furniture(m, 'plant_big', 18, 3, (18, 3, 1, 1))
   wall_deco(m, 'paint_land', 13 * T, 8)
   for (x0, y) in ((10, 10), (16, 10)):
-    m.paint(SPRITES['bench3_seat'][0], x0 * T, y * T)
     idx = m.ent('bench3_back', x0 * T - 1, y * T + 10, y * T + 17)
+    m.part(idx, 'bench3_seat', x0 * T, y * T, y * T)
     for i in range(3):
       m.seat(x0 + i, y, 'up')
     m.attach(idx, [(x0 + i, y) for i in range(3)])
@@ -1011,8 +1035,8 @@ def build_hall():
   m.objects.append({'id': 'stage-board', 'kind': 'board', 'px': 24 * T + 8, 'py': T + 4})
   for y in (8, 10, 12, 14):
     for x0 in (21, 25):
-      m.paint(SPRITES['bench3_seat'][0], x0 * T, y * T)
       idx = m.ent('bench3_back', x0 * T - 1, y * T + 10, y * T + 17)
+      m.part(idx, 'bench3_seat', x0 * T, y * T, y * T)
       for i in range(3):
         m.seat(x0 + i, y, 'up')
       m.attach(idx, [(x0 + i, y) for i in range(3)])
@@ -1067,8 +1091,8 @@ def build_office():
                         'seatX': col, 'seatY': row + 1})
       desk_no += 1
   # Lounge: a sofa facing a low table on the rug.
-  m.paint(SPRITES['sofa3_seat'][0], 1 * T, 11 * T)
   sofa = m.ent('sofa3_back', 1 * T - 2, 11 * T + 9, 11 * T + 16)
+  m.part(sofa, 'sofa3_seat', 1 * T, 11 * T, 11 * T)
   lounge = [m.seat(1 + i, 11, 'up') for i in range(3)]
   m.attach(sofa, [(1 + i, 11) for i in range(3)])
   furniture(m, 'cafe_table', 2, 9, (2, 9, 1, 1), dx=-3)
@@ -1139,9 +1163,7 @@ def write_meta(maps):
     'private': sorted(m.id for m in maps if m.private),
     # What builders may not block or remove, and which furniture they may hide (key -> owned tiles).
     'protected': {m.id: sorted([x, y] for (x, y) in m.protected) for m in maps},
-    'furniture': {m.id: {key: sorted([list(t) for t in m.ent_tiles.get(i, ())])
-                         for i, key in enumerate(m.ent_keys()) if i not in m.ent_protected}
-                  for m in maps},
+    'furniture': {m.id: m.furniture_tiles() for m in maps},
   }
   text = ('"""Generated by tools/build_world.py: shared world facts for the hub. Do not edit."""\n'
           + 'META = ' + json.dumps(meta, indent=1, sort_keys=True) + '\n')

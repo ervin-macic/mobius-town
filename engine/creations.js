@@ -71,7 +71,7 @@ export function applyCreations(base, list) {
   for (const c of shown) {
     for (const g of c.body.ground || []) under.push({ img: picture(g.img), x: g.x, y: g.y, c: c.id })
     for (const p of c.body.props || []) {
-      const piece = { frames: p.frames.map(picture), x: p.x, y: p.y, z: p.z, fps: p.fps || 0, fx: p.fx || null, c: c.id }
+      const piece = { frames: p.frames.map(picture), x: p.x, y: p.y, z: p.z, w: p.w, h: p.h, fps: p.fps || 0, fx: p.fx || null, c: c.id }
       if (p.layer === 'ground') under.push(piece)
       else if (p.layer === 'over') over.push(piece)
       else ents.push(piece)

@@ -86,12 +86,19 @@ class Map:
     return self.rooms[i] if 0 <= i < len(self.rooms) else self.rooms[0]
 
   def furniture(self, hidden=()):
-    """Entities a builder may hide: key -> (sprite, tiles)."""
+    """Entities a builder may hide: key -> (sprite, tiles). The parts of one piece of furniture
+    (a bench's seat and backrest) share its key; the part owning its tiles names it."""
     out = {}
     for e in self.ents:
       sid, x, y, z, tiles, prot, key = e
-      if not prot and key not in hidden:
-        out[key] = (sid, [tuple(t) for t in tiles])
+      if prot or key in hidden:
+        continue
+      tiles = [tuple(t) for t in tiles]
+      if key in out:
+        name, owned = out[key]
+        out[key] = (sid if tiles and not owned else name, sorted(set(owned) | set(tiles)))
+      else:
+        out[key] = (sid, tiles)
     return out
 
   def ent_by_key(self):

@@ -103,22 +103,40 @@ function hash(text, k) {
   return (h ^ (h >>> 16)) >>> 0
 }
 
+// A cat's resting spots and walks depend on its map, and creations change the map (applyCreations
+// makes a new one), so both are kept per map: a new creation sends the cats round what was built.
+const caches = new WeakMap()
+function cacheOf(map) {
+  let c = caches.get(map)
+  if (!c) caches.set(map, (c = { tiles: new Map(), paths: new Map() }))
+  return c
+}
+
+/** Where something drawn on the map sits: an atlas entry [name, x, y, z, ...] or a creation's piece. */
+function extent(e) {
+  if (Array.isArray(e)) {
+    const frame = sprite(e[0])?.f?.[0]
+    return frame ? { x: e[1], y: e[2], z: e[3], w: frame[2], h: frame[3] } : null
+  }
+  return Number.isFinite(e?.w) && Number.isFinite(e?.h) ? { x: e.x, y: e.y, z: e.z, w: e.w, h: e.h } : null
+}
+
 /** True when something drawn in front of a cat resting on (x, y) would mostly hide it. */
 function hidden(map, x, y) {
   const cx = x * T + T / 2 - 8, cy = y * T + 13 - 15
-  for (const [name, ex, ey, ez] of map.ents) {
-    if (ez <= y * T + 13) continue
-    const frame = sprite(name)?.f?.[0]
-    if (!frame) continue
-    const ox = Math.min(cx + 16, ex + frame[2]) - Math.max(cx, ex)
-    const oy = Math.min(cy + 16, ey + frame[3]) - Math.max(cy, ey)
+  for (const e of map.ents) {
+    const b = extent(e)
+    if (!b || b.z <= y * T + 13) continue
+    const ox = Math.min(cx + 16, b.x + b.w) - Math.max(cx, b.x)
+    const oy = Math.min(cy + 16, b.y + b.h) - Math.max(cy, b.y)
     if (ox > 0 && oy > 0 && ox * oy > 16 * 16 * 0.3) return true
   }
   return false
 }
 
 function zoneTiles(cat, map) {
-  if (cat.tiles) return cat.tiles
+  const cache = cacheOf(map).tiles
+  if (cache.has(cat.id)) return cache.get(cat.id)
   const [x0, y0, x1, y1] = cat.zone
   const tiles = []
   for (let y = y0; y <= y1; y++) {
@@ -128,7 +146,9 @@ function zoneTiles(cat, map) {
       if (tileKind(map, x, y) === 0 && !seatAt(map, x, y) && !hidden(map, x, y)) tiles.push([x, y])
     }
   }
-  cat.tiles = tiles
+  // Everything built over: the cat keeps to its patch's corner rather than vanishing.
+  if (!tiles.length) tiles.push([x0, y0])
+  cache.set(cat.id, tiles)
   return tiles
 }
 
@@ -139,9 +159,8 @@ function spot(cat, map, k) {
   return tiles[hash(cat.id, epoch) % tiles.length]
 }
 
-const paths = new Map()
-
 function segmentPath(cat, map, k) {
+  const paths = cacheOf(map).paths
   const key = `${cat.id}:${k}`
   if (paths.has(key)) return paths.get(key)
   const [sx, sy] = spot(cat, map, k)

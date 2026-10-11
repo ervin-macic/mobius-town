@@ -2,7 +2,7 @@
   "id": "mobius-town",
   "package_id": "e62b0c31-8b49-41f3-8270-4b9b8ad338b6",
   "name": "Möbius Town",
-  "version": "0.5.0",
+  "version": "0.5.2",
   "description": "A shared pixel-art town where everyone is a Möbian: walk up to others to talk, play chess, football and party games, change the town itself by asking: say what should exist and a builder agent builds it live for everyone, teleport to friends, and meet your own agents in the Agent Office.",
   "entry": "index.jsx",
   "icon": "icon.png",
